@@ -1,0 +1,24 @@
+[
+  {
+    "name": "Amazon Keepa",
+    "slug": "amazon-keepa",
+    "source_type": "affiliate_feed",
+    "base_url": "https://www.amazon.com",
+    "is_active": true,
+    "config": {
+      "parser": "keepa",
+      "region": "US"
+    }
+  },
+  {
+    "name": "SerpApi Google Shopping",
+    "slug": "serpapi-google-shopping",
+    "source_type": "affiliate_feed",
+    "base_url": "https://serpapi.com",
+    "is_active": true,
+    "config": {
+      "parser": "affiliate_csv",
+      "engine": "google_shopping"
+    }
+  }
+]

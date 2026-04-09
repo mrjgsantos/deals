@@ -1,0 +1,28 @@
+{
+  "source_slug": "amazon-keepa",
+  "parser": "keepa",
+  "payload": {
+    "products": [
+      {
+        "asin": "B0CCEXAMPLE",
+        "domainId": 1,
+        "title": "Royal Canin Mini Adult 2x8kg",
+        "brand": "Royal Canin",
+        "manufacturer": "Royal Canin",
+        "buyBoxPrice": 5999,
+        "listPrice": 7999,
+        "shipping": 0,
+        "currency": "EUR",
+        "availabilityAmazon": 10,
+        "imagesCSV": "61example.jpg,71example.jpg",
+        "categoryTree": [
+          { "name": "Pet Supplies" },
+          { "name": "Dog Food" }
+        ],
+        "lastUpdate": 4500000,
+        "model": "RC-MINI-ADULT",
+        "upcList": ["0123456789012"]
+      }
+    ]
+  }
+}
