@@ -80,6 +80,14 @@ function readDecimalLike(record: ApiRecord, field: string): string | null {
   return null;
 }
 
+function readRequiredDecimalLike(record: ApiRecord, field: string, context: string): string {
+  const value = readDecimalLike(record, field);
+  if (value == null) {
+    throw new ApiContractError(`${context}.${field} should be a decimal-like string or number.`);
+  }
+  return value;
+}
+
 function readStringArray(record: ApiRecord, field: string): string[] {
   const value = record[field];
   if (!Array.isArray(value)) {
@@ -201,7 +209,7 @@ function normalizeDeal(value: unknown): Deal {
     title: readRequiredString(record, "title", "deal"),
     status: readRequiredString(record, "status", "deal"),
     currency: readRequiredString(record, "currency", "deal"),
-    current_price: readRequiredString(record, "current_price", "deal"),
+    current_price: readRequiredDecimalLike(record, "current_price", "deal"),
     previous_price: readDecimalLike(record, "previous_price"),
     savings_amount: readDecimalLike(record, "savings_amount"),
     savings_percent: readDecimalLike(record, "savings_percent"),
@@ -211,6 +219,7 @@ function normalizeDeal(value: unknown): Deal {
     product_variant_id: readOptionalString(record, "product_variant_id"),
     product_source_record_id: readOptionalString(record, "product_source_record_id"),
     detected_at: readRequiredString(record, "detected_at", "deal"),
+    published_at: readOptionalString(record, "published_at"),
     score_breakdown: normalizeScoreBreakdown(record.score_breakdown),
     ai_copy_draft: normalizeAICopyDraft(record.ai_copy_draft),
   };
@@ -222,7 +231,7 @@ function normalizePublishedDeal(value: unknown): PublishedDeal {
     id: readRequiredString(record, "id", "published_deal"),
     title: readRequiredString(record, "title", "published_deal"),
     currency: readRequiredString(record, "currency", "published_deal"),
-    current_price: readRequiredString(record, "current_price", "published_deal"),
+    current_price: readRequiredDecimalLike(record, "current_price", "published_deal"),
     previous_price: readDecimalLike(record, "previous_price"),
     savings_amount: readDecimalLike(record, "savings_amount"),
     savings_percent: readDecimalLike(record, "savings_percent"),

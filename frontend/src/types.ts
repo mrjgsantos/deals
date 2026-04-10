@@ -45,6 +45,7 @@ export type Deal = {
   product_variant_id: string | null;
   product_source_record_id: string | null;
   detected_at: string;
+  published_at: string | null;
   score_breakdown: DealScoreBreakdown;
   ai_copy_draft: AICopyDraft | null;
 };

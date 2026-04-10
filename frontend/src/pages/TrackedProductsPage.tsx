@@ -6,7 +6,8 @@ import { api, getApiErrorMessage } from "../lib/api";
 import { formatDateTime, toTimestamp } from "../lib/format";
 import type { TrackedProductItem, TrackedProductsResponse, TrackedProductsSchedulerStatus, TrackedProductsSummary } from "../types";
 
-type TrackedSort = "attempt" | "status" | "history" | "asin";
+type TrackedSort = "attempt" | "status" | "history" | "asin" | "priority";
+type TrackedFocus = "all" | "due_now" | "failed" | "pending_review" | "published" | "linked";
 
 const EMPTY_SUMMARY: TrackedProductsSummary = {
   total_tracked_products: 0,
@@ -105,6 +106,50 @@ function getStatusRank(status: string): number {
   return ranks[status] ?? 5;
 }
 
+function getPriorityRank(priority: string): number {
+  const ranks: Record<string, number> = {
+    urgent: 0,
+    high: 1,
+    normal: 2,
+    low: 3,
+  };
+  return ranks[priority] ?? 4;
+}
+
+function isDueNow(item: TrackedProductItem): boolean {
+  const nextEligibleAt = toTimestamp(item.next_refresh_earliest_at);
+  if (item.staleness_classification === "stale") {
+    return true;
+  }
+  return nextEligibleAt !== null && nextEligibleAt <= Date.now();
+}
+
+function matchesTrackedFocus(item: TrackedProductItem, focus: TrackedFocus): boolean {
+  if (focus === "all") {
+    return true;
+  }
+  if (focus === "due_now") {
+    return isDueNow(item);
+  }
+  if (focus === "failed") {
+    return item.refresh_status === "fetch_failed" || item.refresh_status === "ingest_failed" || item.staleness_classification === "retry_backoff";
+  }
+  if (focus === "pending_review") {
+    return item.has_pending_review_deal;
+  }
+  if (focus === "published") {
+    return item.has_published_deal;
+  }
+  return item.linked_deal_count > 0;
+}
+
+function getTrackedSearchText(item: TrackedProductItem): string {
+  return [item.asin, item.display_name, item.source_name, item.source_slug, item.refresh_failure_reason]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 function getLinkedBadges(item: TrackedProductItem): Array<{ value: string; tone: BadgeTone }> {
   const badges: Array<{ value: string; tone: BadgeTone }> = [];
   if (item.has_pending_review_deal) {
@@ -126,6 +171,8 @@ export function TrackedProductsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<TrackedSort>("attempt");
+  const [focus, setFocus] = useState<TrackedFocus>("all");
+  const [filterText, setFilterText] = useState("");
 
   async function loadTrackedProducts() {
     setIsLoading(true);
@@ -148,7 +195,25 @@ export function TrackedProductsPage() {
   }, []);
 
   const visibleItems = useMemo(() => {
-    return [...items].sort((left, right) => {
+    const normalizedFilter = filterText.trim().toLowerCase();
+    const filtered = items.filter((item) => {
+      if (!matchesTrackedFocus(item, focus)) {
+        return false;
+      }
+      if (normalizedFilter.length === 0) {
+        return true;
+      }
+      return getTrackedSearchText(item).includes(normalizedFilter);
+    });
+
+    return [...filtered].sort((left, right) => {
+      if (sortBy === "priority") {
+        return (
+          getPriorityRank(left.refresh_priority) - getPriorityRank(right.refresh_priority) ||
+          Number(isDueNow(right)) - Number(isDueNow(left)) ||
+          (toTimestamp(left.next_refresh_earliest_at) ?? 0) - (toTimestamp(right.next_refresh_earliest_at) ?? 0)
+        );
+      }
       if (sortBy === "status") {
         return (
           getStatusRank(left.refresh_status) - getStatusRank(right.refresh_status) ||
@@ -166,7 +231,7 @@ export function TrackedProductsPage() {
       }
       return (toTimestamp(left.last_refresh_attempt_at) ?? 0) - (toTimestamp(right.last_refresh_attempt_at) ?? 0);
     });
-  }, [items, sortBy]);
+  }, [filterText, focus, items, sortBy]);
 
   if (isLoading) {
     return <StatusMessage tone="info" title="Loading tracked products" detail="Fetching the tracked ASIN pool and latest Keepa refresh state." />;
@@ -185,16 +250,40 @@ export function TrackedProductsPage() {
           <p className="screen-subtitle">Inspect the tracked ASIN pool, the latest refresh outcome, and where tracked products connect back into the deals flow.</p>
         </div>
         <div className="header-meta header-meta-stack">
-          <span className="counter">{summary.total_tracked_products} tracked</span>
+          <div className="counter-row">
+            <span className="counter">{summary.total_tracked_products} tracked</span>
+            {visibleItems.length !== items.length ? <span className="counter">{visibleItems.length} shown</span> : null}
+          </div>
           <div className="filter-row">
             <label className="filter-control">
               <span>Sort</span>
               <select value={sortBy} onChange={(event) => setSortBy(event.target.value as TrackedSort)}>
                 <option value="attempt">Oldest attempt first</option>
+                <option value="priority">Refresh priority</option>
                 <option value="status">Refresh status</option>
                 <option value="history">Observation count</option>
                 <option value="asin">ASIN</option>
               </select>
+            </label>
+            <label className="filter-control">
+              <span>Focus</span>
+              <select value={focus} onChange={(event) => setFocus(event.target.value as TrackedFocus)}>
+                <option value="all">All tracked</option>
+                <option value="due_now">Due now</option>
+                <option value="failed">Failed / backoff</option>
+                <option value="pending_review">Pending review</option>
+                <option value="published">Published</option>
+                <option value="linked">Any linked deal</option>
+              </select>
+            </label>
+            <label className="filter-control filter-control-wide">
+              <span>Filter</span>
+              <input
+                type="text"
+                value={filterText}
+                onChange={(event) => setFilterText(event.target.value)}
+                placeholder="ASIN, product, source, failure"
+              />
             </label>
             <button className="secondary-button" onClick={() => void loadTrackedProducts()}>
               Refresh
@@ -307,6 +396,7 @@ export function TrackedProductsPage() {
             <tbody>
               {visibleItems.map((item) => {
                 const linkedBadges = getLinkedBadges(item);
+                const dueNow = isDueNow(item);
 
                 return (
                   <tr key={item.id}>
@@ -338,6 +428,7 @@ export function TrackedProductsPage() {
                         <Badge value={item.refresh_status} tone={getRefreshTone(item.refresh_status)} />
                         <Badge value={item.refresh_priority} tone={getPriorityTone(item.refresh_priority)} />
                         <Badge value={item.staleness_classification} tone="neutral" />
+                        {dueNow ? <Badge value="due now" tone="warning" /> : null}
                       </div>
                       <div className="table-subtitle">Attempt {formatTimestamp(item.last_refresh_attempt_at)}</div>
                       <div className="table-subtitle">Success {formatTimestamp(item.last_successful_refresh_at)}</div>

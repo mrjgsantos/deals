@@ -7,13 +7,10 @@ import { StatusMessage } from "../components/StatusMessage";
 import { formatDateTime, formatMoney, formatPercent, toSentenceCase, toTimestamp } from "../lib/format";
 import { Badge } from "../components/Badge";
 import {
-  getDecisionReasons,
   getHistoryStrengthTone,
   getHistorySupportSummary,
-  getObservationSummary,
   getPublicationReadiness,
   getQualityScore,
-  getQualityTone,
   getSavingsPercentValue,
   hasFakeDiscountRisk,
   hasWeakHistory,
