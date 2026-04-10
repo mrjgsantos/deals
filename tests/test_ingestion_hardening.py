@@ -168,6 +168,18 @@ def make_normalized_record() -> NormalizedIngestionRecord:
     )
 
 
+def updated_normalized_record(
+    normalized: NormalizedIngestionRecord,
+    **updates,
+) -> NormalizedIngestionRecord:
+    return NormalizedIngestionRecord.model_validate(
+        {
+            **normalized.model_dump(mode="python"),
+            **updates,
+        }
+    )
+
+
 def make_parsed_record() -> ParsedSourceRecord:
     return ParsedSourceRecord(
         external_id="sku-1",
@@ -191,6 +203,20 @@ class RecordingDealGenerationService:
                 "product_source_record_id": product_source_record.id,
                 "price_observation_id": price_observation.id,
             }
+        )
+
+
+class ObservationAwareDealGenerationService:
+    def __init__(self) -> None:
+        self.observation_count_at_call = 0
+        self.keepa_history_count_at_call = 0
+
+    def sync_deal_for_source_record(self, db, *, source, product_source_record, price_observation):
+        self.observation_count_at_call = sum(1 for item in db.added if isinstance(item, PriceObservation))
+        self.keepa_history_count_at_call = sum(
+            1
+            for item in db.added
+            if isinstance(item, PriceObservation) and (item.metadata_json or {}).get("derived_from") == "keepa_history"
         )
 
 
@@ -240,6 +266,51 @@ class MatchAwareIngestionService(StubIngestionService):
             weight_unit=normalized.weight_unit,
             is_bundle=normalized.is_bundle,
         )
+
+
+class KeepaHistoryAwareIngestionService(StubIngestionService):
+    def _find_existing_price_observation_by_hash(self, db, *, product_source_record_id, observed_hash):
+        for item in db.added:
+            if (
+                isinstance(item, PriceObservation)
+                and item.product_source_record_id == product_source_record_id
+                and item.observed_hash == observed_hash
+            ):
+                return item
+        return None
+
+
+class KeepaFetchAwareIngestionService(KeepaHistoryAwareIngestionService):
+    def __init__(
+        self,
+        parser,
+        normalizer,
+        *,
+        keepa_payload=None,
+        keepa_error: Exception | None = None,
+        history_counts=(0, 0, 0),
+        deal_generation_service=None,
+        matcher=None,
+    ):
+        super().__init__(
+            parser,
+            normalizer,
+            deal_generation_service=deal_generation_service,
+            matcher=matcher,
+        )
+        self.keepa_payload = keepa_payload
+        self.keepa_error = keepa_error
+        self.history_counts = history_counts
+        self.keepa_fetch_calls = []
+
+    def _price_history_counts_for_variant(self, db, product_variant_id, *, now):
+        return self.history_counts
+
+    def _fetch_keepa_payload_for_asin(self, asin: str):
+        self.keepa_fetch_calls.append(asin)
+        if self.keepa_error is not None:
+            raise self.keepa_error
+        return self.keepa_payload
 
 
 def test_observed_hash_is_deterministic() -> None:
@@ -382,6 +453,36 @@ def test_ingest_uses_hybrid_match_when_exact_fails() -> None:
     assert product_source_record.product_variant.id == hybrid_variant_id
 
 
+def test_ingest_keeps_exact_conflict_block_and_skips_hybrid() -> None:
+    normalized = make_normalized_record()
+    exact_matcher = StubMatcher(
+        MatchDecision(
+            matched=False,
+            reason="all exact matches blocked by critical variant conflict",
+            blocked_reasons=["critical variant conflict for gtin:0123456789012"],
+        )
+    )
+    matcher = MatchingService(
+        exact_matcher=exact_matcher,
+        hybrid_matcher=ExplodingMatcher(),
+    )
+    service = MatchAwareIngestionService(
+        FakeParser([make_parsed_record()]),
+        FakeNormalizer(normalized),
+        matcher=matcher,
+    )
+    db = FakeSession()
+
+    result = service.ingest(db, "source-a", payload={})
+    product_source_record = next(item for item in db.added if isinstance(item, ProductSourceRecord))
+
+    assert result.accepted == 1
+    assert exact_matcher.calls == 1
+    assert result.records[0].status == "accepted"
+    assert product_source_record.product is not None
+    assert product_source_record.product_variant is not None
+
+
 def test_ingest_creates_new_variant_when_hybrid_returns_no_match() -> None:
     normalized = make_normalized_record()
     exact_matcher = StubMatcher(MatchDecision(matched=False, reason="no exact match"))
@@ -441,3 +542,276 @@ def test_duplicate_observation_suppression_is_unchanged_with_matching_fallbacks(
 
     assert result.accepted == 1
     assert result.records[0].status == "duplicate"
+
+
+def test_keepa_history_observations_are_inserted_when_keepa_payload_exists() -> None:
+    normalized = make_normalized_record()
+    normalized = updated_normalized_record(
+        normalized,
+        external_id="B0TEST1234",
+        source_attributes={"asin": "B0TEST1234"},
+        raw_payload={
+            "data": {
+                "NEW": [4999, 4599],
+                "NEW_time": [0, 60],
+            }
+        },
+        observed_at=datetime(2011, 1, 1, 3, 0, tzinfo=timezone.utc),
+    )
+    service = KeepaHistoryAwareIngestionService(
+        FakeParser([make_parsed_record()]),
+        FakeNormalizer(normalized),
+    )
+    db = FakeSession()
+
+    result = service.ingest(db, "amazon-keepa", payload={})
+
+    historical = [
+        item
+        for item in db.added
+        if isinstance(item, PriceObservation) and (item.metadata_json or {}).get("derived_from") == "keepa_history"
+    ]
+    current = [
+        item
+        for item in db.added
+        if isinstance(item, PriceObservation) and (item.metadata_json or {}).get("derived_from") != "keepa_history"
+    ]
+
+    assert result.accepted == 1
+    assert len(current) == 1
+    assert len(historical) == 2
+    assert all(item.observed_at.year >= 2011 for item in historical)
+    assert historical[0].sale_price == Decimal("49.99")
+    assert historical[1].sale_price == Decimal("45.99")
+
+
+def test_keepa_history_observations_fall_back_to_amazon_history_when_new_history_missing() -> None:
+    normalized = make_normalized_record()
+    normalized = updated_normalized_record(
+        normalized,
+        external_id="B0AMAZON123",
+        source_attributes={"asin": "B0AMAZON123"},
+        raw_payload={
+            "data": {
+                "AMAZON": [5599, 5199],
+                "AMAZON_time": [0, 60],
+            }
+        },
+        observed_at=datetime(2011, 1, 1, 3, 0, tzinfo=timezone.utc),
+    )
+    service = KeepaHistoryAwareIngestionService(
+        FakeParser([make_parsed_record()]),
+        FakeNormalizer(normalized),
+    )
+    db = FakeSession()
+
+    result = service.ingest(db, "amazon-keepa", payload={})
+
+    historical = [
+        item
+        for item in db.added
+        if isinstance(item, PriceObservation) and (item.metadata_json or {}).get("derived_from") == "keepa_history"
+    ]
+
+    assert result.accepted == 1
+    assert len(historical) == 2
+    assert [item.sale_price for item in historical] == [Decimal("55.99"), Decimal("51.99")]
+
+
+def test_duplicate_keepa_history_points_are_suppressed() -> None:
+    normalized = make_normalized_record()
+    normalized = updated_normalized_record(
+        normalized,
+        external_id="B0TEST1234",
+        source_attributes={"asin": "B0TEST1234"},
+        raw_payload={
+            "data": {
+                "NEW": [4999, 4999, 4599],
+                "NEW_time": [0, 0, 60],
+            }
+        },
+        observed_at=datetime(2011, 1, 1, 3, 0, tzinfo=timezone.utc),
+    )
+    service = KeepaHistoryAwareIngestionService(
+        FakeParser([make_parsed_record()]),
+        FakeNormalizer(normalized),
+    )
+    db = FakeSession()
+
+    service.ingest(db, "amazon-keepa", payload={})
+
+    historical = [
+        item
+        for item in db.added
+        if isinstance(item, PriceObservation) and (item.metadata_json or {}).get("derived_from") == "keepa_history"
+    ]
+
+    assert len(historical) == 2
+
+
+def test_ingestion_continues_when_keepa_history_enrichment_fails(monkeypatch) -> None:
+    normalized = make_normalized_record()
+    normalized = updated_normalized_record(
+        normalized,
+        external_id="B0TEST1234",
+        source_attributes={"asin": "B0TEST1234"},
+        raw_payload={"data": {"NEW": [4999], "NEW_time": [0]}},
+    )
+    service = KeepaHistoryAwareIngestionService(
+        FakeParser([make_parsed_record()]),
+        FakeNormalizer(normalized),
+    )
+    db = FakeSession()
+    monkeypatch.setattr("app.ingestion.service.extract_keepa_price_points", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    result = service.ingest(db, "amazon-keepa", payload={})
+
+    current = [
+        item
+        for item in db.added
+        if isinstance(item, PriceObservation) and (item.metadata_json or {}).get("derived_from") != "keepa_history"
+    ]
+
+    assert result.accepted == 1
+    assert len(current) == 1
+
+
+def test_current_observation_path_remains_intact_with_keepa_history() -> None:
+    normalized = make_normalized_record()
+    normalized = updated_normalized_record(
+        normalized,
+        external_id="B0TEST1234",
+        source_attributes={"asin": "B0TEST1234"},
+        raw_payload={
+            "data": {
+                "NEW": [4999],
+                "NEW_time": [0],
+            }
+        },
+        observed_at=datetime(2011, 1, 1, 2, 0, tzinfo=timezone.utc),
+        current_price=Decimal("39.99"),
+        total_price=Decimal("39.99"),
+    )
+    service = KeepaHistoryAwareIngestionService(
+        FakeParser([make_parsed_record()]),
+        FakeNormalizer(normalized),
+    )
+    db = FakeSession()
+
+    result = service.ingest(db, "amazon-keepa", payload={})
+    current = next(
+        item
+        for item in db.added
+        if isinstance(item, PriceObservation) and (item.metadata_json or {}).get("derived_from") != "keepa_history"
+    )
+
+    assert result.records[0].price_observation_id == str(current.id)
+    assert current.sale_price == Decimal("39.99")
+
+
+def test_ingestion_with_keepa_enrichment_enabled_persists_history_before_deal_generation(caplog) -> None:
+    normalized = updated_normalized_record(
+        make_normalized_record(),
+        product_url="https://www.amazon.es/dp/B0TEST1234",
+        source_attributes={"asin": "B0TEST1234"},
+        observed_at=datetime(2011, 1, 1, 3, 0, tzinfo=timezone.utc),
+    )
+    deal_generation_service = ObservationAwareDealGenerationService()
+    service = KeepaFetchAwareIngestionService(
+        FakeParser([make_parsed_record()]),
+        FakeNormalizer(normalized),
+        keepa_payload={
+            "products": [
+                {
+                    "data": {
+                        "NEW": [4999, 4599],
+                        "NEW_time": [0, 60],
+                    }
+                }
+            ]
+        },
+        history_counts=(1, 1, 1),
+        deal_generation_service=deal_generation_service,
+    )
+    db = FakeSession()
+    caplog.set_level("INFO", logger="app.ingestion.service")
+
+    result = service.ingest(db, "serpapi-google-shopping", payload={})
+
+    assert result.accepted == 1
+    assert service.keepa_fetch_calls == ["B0TEST1234"]
+    assert deal_generation_service.observation_count_at_call == 3
+    assert deal_generation_service.keepa_history_count_at_call == 2
+    assert "keepa_fetch_enrichment_due" in caplog.text
+    assert "keepa_fetch_enrichment_complete" in caplog.text
+
+
+def test_ingestion_without_asin_skips_keepa_fetch(caplog) -> None:
+    normalized = updated_normalized_record(
+        make_normalized_record(),
+        product_url="https://www.amazon.es/dp/B0TEST1234",
+        source_attributes={},
+    )
+    service = KeepaFetchAwareIngestionService(
+        FakeParser([make_parsed_record()]),
+        FakeNormalizer(normalized),
+        keepa_error=AssertionError("keepa should not have been called"),
+    )
+    db = FakeSession()
+    caplog.set_level("INFO", logger="app.ingestion.service")
+
+    result = service.ingest(db, "serpapi-google-shopping", payload={})
+
+    assert result.accepted == 1
+    assert service.keepa_fetch_calls == []
+    assert "keepa_fetch_enrichment_skipped" in caplog.text
+    assert "reason=missing_asin" in caplog.text
+
+
+def test_ingestion_continues_when_keepa_fetch_fails() -> None:
+    normalized = updated_normalized_record(
+        make_normalized_record(),
+        product_url="https://www.amazon.es/dp/B0TEST1234",
+        source_attributes={"asin": "B0TEST1234"},
+    )
+    service = KeepaFetchAwareIngestionService(
+        FakeParser([make_parsed_record()]),
+        FakeNormalizer(normalized),
+        keepa_error=RuntimeError("boom"),
+        history_counts=(1, 1, 1),
+    )
+    db = FakeSession()
+
+    result = service.ingest(db, "serpapi-google-shopping", payload={})
+    current = [
+        item
+        for item in db.added
+        if isinstance(item, PriceObservation) and (item.metadata_json or {}).get("derived_from") != "keepa_history"
+    ]
+
+    assert result.accepted == 1
+    assert service.keepa_fetch_calls == ["B0TEST1234"]
+    assert len(current) == 1
+
+
+def test_ingestion_with_sufficient_history_skips_keepa_fetch(caplog) -> None:
+    normalized = updated_normalized_record(
+        make_normalized_record(),
+        product_url="https://www.amazon.es/dp/B0TEST1234",
+        source_attributes={"asin": "B0TEST1234"},
+    )
+    service = KeepaFetchAwareIngestionService(
+        FakeParser([make_parsed_record()]),
+        FakeNormalizer(normalized),
+        keepa_error=AssertionError("keepa should not have been called"),
+        history_counts=(5, 8, 8),
+    )
+    db = FakeSession()
+    caplog.set_level("INFO", logger="app.ingestion.service")
+
+    result = service.ingest(db, "serpapi-google-shopping", payload={})
+
+    assert result.accepted == 1
+    assert service.keepa_fetch_calls == []
+    assert "keepa_fetch_enrichment_skipped" in caplog.text
+    assert "reason=sufficient_local_history" in caplog.text

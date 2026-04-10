@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from decimal import Decimal
+import logging
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,7 +13,15 @@ from app.db.models import Deal, PriceObservation, ProductSourceRecord, ReviewQue
 from app.pricing.aggregation import aggregate_price_history_for_variant
 from app.pricing.fake_discount import analyze_fake_discount
 from app.pricing.schemas import DealScoringInput
-from app.pricing.scoring import score_deal
+from app.pricing.scoring import classify_source_link_quality, score_deal
+from app.services.tracked_product_service import ensure_tracked_product_for_source_record
+
+MIN_PREVIOUS_PRICE_OBSERVATIONS_30D = 3
+MIN_PREVIOUS_PRICE_OBSERVATIONS_90D = 3
+MIN_PREVIOUS_PRICE_OBSERVATIONS_ALL_TIME = 4
+AUTO_PUBLISH_QUALITY_THRESHOLD = 65
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -31,10 +41,21 @@ class DealGenerationService:
         price_observation: PriceObservation,
     ) -> DealGenerationResult:
         if product_source_record.product_variant_id is None:
+            logger.info(
+                "deal_generation_skipped source=%s product_source_record_id=%s reason=missing_product_variant",
+                source.slug,
+                product_source_record.id,
+            )
             return DealGenerationResult(deal=None, review_queue_item=None, eligible=False)
 
         current_price = price_observation.sale_price or price_observation.total_price
         if current_price is None:
+            logger.info(
+                "deal_generation_skipped source=%s product_source_record_id=%s product_variant_id=%s reason=missing_current_price",
+                source.slug,
+                product_source_record.id,
+                product_source_record.product_variant_id,
+            )
             return DealGenerationResult(deal=None, review_queue_item=None, eligible=False)
 
         aggregation = aggregate_price_history_for_variant(
@@ -43,7 +64,7 @@ class DealGenerationService:
             now=price_observation.observed_at,
         )
         scoring_aggregation = self._aggregation_for_scoring(aggregation)
-        previous_price = self._supported_previous_price(price_observation, aggregation.all_time_max)
+        previous_price = self._supported_previous_price(price_observation, aggregation)
         claimed_discount_percent = self._claimed_discount_percent(current_price, previous_price)
         fake_discount = analyze_fake_discount(
             current_price=current_price,
@@ -51,6 +72,7 @@ class DealGenerationService:
             claimed_discount_percent=claimed_discount_percent,
             aggregation=scoring_aggregation,
         )
+        source_link_quality = classify_source_link_quality(product_source_record.source_url)
         scored = score_deal(
             DealScoringInput(
                 current_price=current_price,
@@ -61,14 +83,26 @@ class DealGenerationService:
                 merchant_priority=0,
                 source_priority=0,
                 category_priority=0,
+                source_link_quality=source_link_quality,
             )
         )
 
         if not scored.quality.promotable:
+            logger.info(
+                "deal_generation_skipped source=%s product_source_record_id=%s product_variant_id=%s reason=not_promotable quality_score=%s quality_reasons=%s",
+                source.slug,
+                product_source_record.id,
+                product_source_record.product_variant_id,
+                scored.quality.score,
+                scored.quality.reasons,
+            )
             return DealGenerationResult(deal=None, review_queue_item=None, eligible=False)
 
+        auto_publish = self._should_auto_publish(scored)
         savings_amount = previous_price - current_price if previous_price is not None else None
         deal = self._get_existing_deal(db, product_source_record)
+        published_at = datetime.now(timezone.utc) if auto_publish else None
+        preserve_published = False
         if deal is None:
             deal = Deal(
                 product_variant_id=product_source_record.product_variant_id,
@@ -76,33 +110,70 @@ class DealGenerationService:
                 price_observation_id=price_observation.id,
                 source_id=source.id,
                 title=product_source_record.source_title,
-                status=DealStatus.PENDING_REVIEW,
+                status=DealStatus.PUBLISHED if auto_publish else DealStatus.PENDING_REVIEW,
                 currency=product_source_record.currency,
                 current_price=current_price,
                 previous_price=previous_price,
                 savings_amount=savings_amount,
                 savings_percent=claimed_discount_percent / Decimal("100") if claimed_discount_percent is not None else None,
+                published_at=published_at,
                 deal_url=product_source_record.source_url,
                 summary=product_source_record.source_description,
-                metadata_json=self._deal_metadata(scored, fake_discount, aggregation),
+                metadata_json=self._deal_metadata(scored, fake_discount, aggregation, source_link_quality),
             )
             db.add(deal)
             db.flush()
         else:
+            preserve_published = deal.status == DealStatus.PUBLISHED and deal.published_at is not None
             deal.product_variant_id = product_source_record.product_variant_id
             deal.price_observation_id = price_observation.id
             deal.title = product_source_record.source_title
-            deal.status = DealStatus.PENDING_REVIEW
+            deal.status = DealStatus.PUBLISHED if auto_publish or preserve_published else DealStatus.PENDING_REVIEW
             deal.currency = product_source_record.currency
             deal.current_price = current_price
             deal.previous_price = previous_price
             deal.savings_amount = savings_amount
             deal.savings_percent = claimed_discount_percent / Decimal("100") if claimed_discount_percent is not None else None
+            if auto_publish and deal.published_at is None:
+                deal.published_at = published_at
             deal.deal_url = product_source_record.source_url
             deal.summary = product_source_record.source_description
-            deal.metadata_json = self._deal_metadata(scored, fake_discount, aggregation)
+            deal.metadata_json = self._deal_metadata(scored, fake_discount, aggregation, source_link_quality)
 
+        deal.metadata_json = self._merged_metadata(
+            deal.metadata_json,
+            {
+                "publication_decision": self._publication_decision(
+                    scored=scored,
+                    auto_publish=auto_publish,
+                    preserve_published=preserve_published,
+                )
+            },
+        )
         review_queue_item = self._get_existing_review_queue_item(db, deal)
+        review_action = "none"
+        if auto_publish:
+            if review_queue_item is not None:
+                review_queue_item.product_source_record_id = product_source_record.id
+                review_queue_item.status = ReviewStatus.RESOLVED
+                review_queue_item.reason = "auto_published_deal"
+                review_queue_item.payload = self._review_payload(deal)
+                review_queue_item.resolved_at = published_at or datetime.now(timezone.utc)
+                review_action = "resolved_existing_review"
+            else:
+                review_action = "auto_published_without_review"
+            self._log_generation_decision(
+                source=source,
+                product_source_record=product_source_record,
+                deal=deal,
+                scored=scored,
+                auto_publish=auto_publish,
+                preserve_published=preserve_published,
+                review_action=review_action,
+            )
+            self._ensure_tracked_product(db, product_source_record)
+            return DealGenerationResult(deal=deal, review_queue_item=review_queue_item, eligible=True)
+
         if review_queue_item is None:
             review_queue_item = ReviewQueue(
                 product_source_record_id=product_source_record.id,
@@ -115,28 +186,74 @@ class DealGenerationService:
             )
             db.add(review_queue_item)
             db.flush()
+            review_action = "created_pending_review"
         else:
             review_queue_item.product_source_record_id = product_source_record.id
             review_queue_item.status = ReviewStatus.PENDING
             review_queue_item.reason = "auto_generated_deal_review"
             review_queue_item.payload = self._review_payload(deal)
+            review_queue_item.resolved_at = None
+            review_action = "updated_pending_review"
+
+        self._log_generation_decision(
+            source=source,
+            product_source_record=product_source_record,
+            deal=deal,
+            scored=scored,
+            auto_publish=auto_publish,
+            preserve_published=preserve_published,
+            review_action=review_action,
+        )
+        self._ensure_tracked_product(db, product_source_record)
 
         return DealGenerationResult(deal=deal, review_queue_item=review_queue_item, eligible=True)
+
+    def _should_auto_publish(self, scored) -> bool:
+        quality_score = scored.quality.score or 0
+        return scored.quality.promotable and quality_score >= AUTO_PUBLISH_QUALITY_THRESHOLD
 
     def _supported_previous_price(
         self,
         price_observation: PriceObservation,
-        all_time_max: Decimal | None,
+        aggregation,
     ) -> Decimal | None:
-        if price_observation.list_price is None or price_observation.sale_price is None:
+        current_price = price_observation.sale_price or price_observation.total_price
+        if current_price is None:
             return None
-        if price_observation.list_price <= price_observation.sale_price:
+
+        historical_baseline = self._historical_previous_price_baseline(
+            current_price=current_price,
+            aggregation=aggregation,
+        )
+        if historical_baseline is not None:
+            return historical_baseline
+
+        return None
+
+    def _historical_previous_price_baseline(
+        self,
+        *,
+        current_price: Decimal,
+        aggregation,
+    ) -> Decimal | None:
+        if not self._has_supported_historical_baseline(aggregation):
             return None
-        if all_time_max is None:
-            return None
-        if price_observation.list_price > all_time_max:
-            return None
-        return price_observation.list_price
+
+        if aggregation.avg_30d is not None and aggregation.observation_count_30d >= MIN_PREVIOUS_PRICE_OBSERVATIONS_30D:
+            if aggregation.avg_30d > current_price:
+                return aggregation.avg_30d
+
+        if aggregation.avg_90d is not None and aggregation.avg_90d > current_price:
+            return aggregation.avg_90d
+
+        return None
+
+    def _has_supported_historical_baseline(self, aggregation) -> bool:
+        if aggregation.observation_count_90d < MIN_PREVIOUS_PRICE_OBSERVATIONS_90D:
+            return False
+        if aggregation.observation_count_all_time < MIN_PREVIOUS_PRICE_OBSERVATIONS_ALL_TIME:
+            return False
+        return True
 
     def _claimed_discount_percent(
         self,
@@ -169,7 +286,7 @@ class DealGenerationService:
             )
         )
 
-    def _deal_metadata(self, scored, fake_discount, aggregation) -> dict:
+    def _deal_metadata(self, scored, fake_discount, aggregation, source_link_quality: str | None) -> dict:
         return {
             "quality_score": scored.quality.score,
             "quality_reasons": scored.quality.reasons,
@@ -182,9 +299,36 @@ class DealGenerationService:
                 "avg_30d": str(aggregation.avg_30d) if aggregation.avg_30d is not None else None,
                 "avg_90d": str(aggregation.avg_90d) if aggregation.avg_90d is not None else None,
                 "min_90d": str(aggregation.min_90d) if aggregation.min_90d is not None else None,
+                "max_90d": str(aggregation.max_90d) if aggregation.max_90d is not None else None,
                 "all_time_min": str(aggregation.all_time_min) if aggregation.all_time_min is not None else None,
                 "days_at_current_price": aggregation.days_at_current_price,
+                "observation_count_30d": aggregation.observation_count_30d,
+                "observation_count_90d": aggregation.observation_count_90d,
+                "observation_count_all_time": aggregation.observation_count_all_time,
             },
+            "source_link_quality": source_link_quality,
+        }
+
+    def _publication_decision(
+        self,
+        *,
+        scored,
+        auto_publish: bool,
+        preserve_published: bool,
+    ) -> dict:
+        quality_score = scored.quality.score or 0
+        if preserve_published:
+            reason = "preserved_existing_publication"
+        elif auto_publish:
+            reason = "auto_publish_threshold_met"
+        else:
+            reason = "quality_below_auto_publish_threshold"
+        return {
+            "quality_score": quality_score,
+            "auto_publish_threshold": AUTO_PUBLISH_QUALITY_THRESHOLD,
+            "auto_publish": auto_publish,
+            "preserve_published": preserve_published,
+            "reason": reason,
         }
 
     def _review_payload(self, deal: Deal) -> dict:
@@ -196,3 +340,39 @@ class DealGenerationService:
             "currency": deal.currency,
             "metadata": deal.metadata_json,
         }
+
+    def _ensure_tracked_product(self, db: Session, product_source_record: ProductSourceRecord) -> None:
+        ensure_tracked_product_for_source_record(db, product_source_record)
+
+    def _merged_metadata(self, existing: dict | None, updates: dict) -> dict:
+        merged = dict(existing or {})
+        merged.update(updates)
+        return merged
+
+    def _log_generation_decision(
+        self,
+        *,
+        source: Source,
+        product_source_record: ProductSourceRecord,
+        deal: Deal,
+        scored,
+        auto_publish: bool,
+        preserve_published: bool,
+        review_action: str,
+    ) -> None:
+        publication_decision = (deal.metadata_json or {}).get("publication_decision", {})
+        logger.info(
+            "deal_generation_decision source=%s product_source_record_id=%s product_variant_id=%s deal_id=%s deal_status=%s quality_score=%s promotable=%s auto_publish=%s preserve_published=%s publication_reason=%s review_action=%s quality_reasons=%s",
+            source.slug,
+            product_source_record.id,
+            product_source_record.product_variant_id,
+            deal.id,
+            deal.status.value,
+            scored.quality.score,
+            scored.quality.promotable,
+            auto_publish,
+            preserve_published,
+            publication_decision.get("reason"),
+            review_action,
+            scored.quality.reasons,
+        )

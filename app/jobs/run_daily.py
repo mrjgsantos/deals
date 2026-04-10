@@ -9,26 +9,29 @@ from app.jobs.daily_stats_recompute import main as stats_main
 from app.jobs.common import run_job
 
 
-def main() -> int:
-    args = _parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
 
     def _runner(logger):
         logger.info("starting daily job sequence")
+        step_results: list[tuple[str, int]] = []
         if args.include_ingestion:
-            ingestion_main()
-        stats_main()
-        scoring_main()
-        ai_main()
-        logger.info("daily job sequence complete")
-        return 0
+            step_results.append(("ingestion", ingestion_main([])))
+        step_results.append(("stats_recompute", stats_main()))
+        step_results.append(("scoring", scoring_main()))
+        step_results.append(("ai_drafts", ai_main()))
+
+        failed_steps = [name for name, exit_code in step_results if exit_code != 0]
+        logger.info("daily job sequence complete failed_steps=%s", ",".join(failed_steps) or "none")
+        return 1 if failed_steps else 0
 
     return run_job("run_daily", _runner)
 
 
-def _parse_args():
+def _parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--include-ingestion", action="store_true")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 if __name__ == "__main__":

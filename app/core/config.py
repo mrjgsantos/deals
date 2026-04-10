@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     serpapi_country: str | None = None
     serpapi_language: str | None = None
     serpapi_location: str | None = None
+    serpapi_queries_file: str = "data/serpapi_queries.json"
+    serpapi_query_limit: int = 8
+    keepa_api_key: str | None = None
+    keepa_domain_id: int = 1
+    enable_background_jobs: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",

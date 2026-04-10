@@ -11,7 +11,7 @@ from app.jobs.common import job_session, run_job
 from app.pricing.aggregation import aggregate_price_history
 from app.pricing.fake_discount import analyze_fake_discount
 from app.pricing.schemas import DealScoringInput, PricePoint
-from app.pricing.scoring import score_deal
+from app.pricing.scoring import classify_source_link_quality, score_deal
 
 
 def main() -> int:
@@ -90,6 +90,7 @@ def main() -> int:
                                 merchant_priority=0,
                                 source_priority=0,
                                 category_priority=0,
+                                source_link_quality=classify_source_link_quality(deal.deal_url),
                             )
                         )
 
@@ -106,9 +107,14 @@ def main() -> int:
                                 "avg_30d": str(aggregation.avg_30d) if aggregation.avg_30d is not None else None,
                                 "avg_90d": str(aggregation.avg_90d) if aggregation.avg_90d is not None else None,
                                 "min_90d": str(aggregation.min_90d) if aggregation.min_90d is not None else None,
+                                "max_90d": str(aggregation.max_90d) if aggregation.max_90d is not None else None,
                                 "all_time_min": str(aggregation.all_time_min) if aggregation.all_time_min is not None else None,
                                 "days_at_current_price": aggregation.days_at_current_price,
+                                "observation_count_30d": aggregation.observation_count_30d,
+                                "observation_count_90d": aggregation.observation_count_90d,
+                                "observation_count_all_time": aggregation.observation_count_all_time,
                             },
+                            "source_link_quality": classify_source_link_quality(deal.deal_url),
                             "scored_at": now.isoformat(),
                         }
                     scored_count += 1

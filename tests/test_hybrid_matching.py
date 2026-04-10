@@ -468,7 +468,7 @@ def test_hybrid_debug_info_includes_conflicts_when_auto_match_is_blocked() -> No
     assert decision.debug.final_decision_reason == "hybrid fallback found only conflicting or weak candidates"
 
 
-def test_matching_service_runs_hybrid_after_exact_miss() -> None:
+def test_matching_service_runs_hybrid_after_exact_miss(caplog) -> None:
     hybrid_decision = MatchDecision(
         matched=False,
         reason="ambiguous hybrid match",
@@ -478,14 +478,18 @@ def test_matching_service_runs_hybrid_after_exact_miss() -> None:
         exact_matcher=StubExactMatcher(MatchDecision(matched=False, reason="no exact match")),
         hybrid_matcher=StubHybridMatcher(hybrid_decision),
     )
+    caplog.set_level("INFO", logger="app.matching.service")
 
     decision = service.match_normalized_record(db=None, normalized_record=make_normalized_record())
 
     assert decision.reason == hybrid_decision.reason
     assert decision.candidate_product_variant_ids == ["variant-1"]
+    assert "matching_decision" in caplog.text
+    assert "attempted_hybrid=True" in caplog.text
+    assert "final_reason=ambiguous hybrid match" in caplog.text
 
 
-def test_matching_service_preserves_exact_match_precedence() -> None:
+def test_matching_service_preserves_exact_match_precedence(caplog) -> None:
     exact_decision = MatchDecision(
         matched=True,
         product_id="product-1",
@@ -497,12 +501,16 @@ def test_matching_service_preserves_exact_match_precedence() -> None:
         exact_matcher=StubExactMatcher(exact_decision),
         hybrid_matcher=StubHybridMatcher(MatchDecision(matched=True, product_variant_id="variant-2")),
     )
+    caplog.set_level("INFO", logger="app.matching.service")
 
     decision = service.match_normalized_record(db=None, normalized_record=make_normalized_record())
 
     assert decision.matched is True
     assert decision.match_strategy == "exact"
     assert decision.product_variant_id == "variant-1"
+    assert "matching_decision" in caplog.text
+    assert "attempted_hybrid=False" in caplog.text
+    assert "final_strategy=exact" in caplog.text
 
 
 def test_matching_service_keeps_exact_block_when_identifier_conflicts() -> None:

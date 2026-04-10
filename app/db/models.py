@@ -66,6 +66,36 @@ class Source(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     deals: Mapped[list[Deal]] = relationship(back_populates="source")
 
 
+class TrackedProduct(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "tracked_products"
+    __table_args__ = (
+        UniqueConstraint("asin", "domain_id", name="uq_tracked_products_asin_domain"),
+        Index("ix_tracked_products_last_checked_at", "last_checked_at"),
+        Index("ix_tracked_products_next_refresh_eligible_at", "next_refresh_eligible_at"),
+    )
+
+    asin: Mapped[str] = mapped_column(String(16), nullable=False)
+    domain_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_refresh_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_refresh_succeeded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_refresh_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_refresh_status: Mapped[str | None] = mapped_column(String(32))
+    last_refresh_failure_reason: Mapped[str | None] = mapped_column(String(255))
+    consecutive_refresh_failures: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    next_refresh_eligible_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Merchant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "merchants"
     __table_args__ = (
@@ -414,6 +444,7 @@ class Deal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     savings_percent: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     detected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

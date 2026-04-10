@@ -6,6 +6,8 @@ from typing import Any
 from app.db.enums import AvailabilityStatus
 from app.ingestion.interfaces import SourceParser
 from app.ingestion.schemas import ParsedSourceRecord
+from app.integrations.keepa_history import KEEPA_CSV_HISTORY_INDEX, keepa_minutes_to_datetime
+from app.integrations.keepa_payloads import DOMAIN_CURRENCY_MAP
 
 
 class KeepaParser(SourceParser):
@@ -21,6 +23,13 @@ class KeepaParser(SourceParser):
         8: "it",
         9: "es",
         10: "in",
+    }
+
+    PRICE_HISTORY_FALLBACKS = {
+        "buyBoxPrice": ("NEW", "AMAZON"),
+        "newPrice": ("NEW", "AMAZON"),
+        "lastPrice": ("NEW", "AMAZON"),
+        "listPrice": ("LISTPRICE",),
     }
 
     def parse(self, payload: Any) -> list[ParsedSourceRecord]:
@@ -89,6 +98,10 @@ class KeepaParser(SourceParser):
             value = self._to_decimal(product.get(key))
             if value is not None:
                 return value
+        for key in keys:
+            fallback_value = self._history_price(product, self.PRICE_HISTORY_FALLBACKS.get(key, ()))
+            if fallback_value is not None:
+                return fallback_value
         return None
 
     def _to_decimal(self, value: Any) -> Decimal | None:
@@ -128,7 +141,49 @@ class KeepaParser(SourceParser):
         return AvailabilityStatus.IN_STOCK
 
     def _extract_currency(self, product: dict[str, Any]) -> str | None:
-        return str(product.get("currency") or "USD").upper()
+        currency = str(product.get("currency") or "").strip()
+        if currency:
+            return currency.upper()
+        try:
+            domain_id = int(product.get("domainId"))
+        except (TypeError, ValueError):
+            return "USD"
+        return DOMAIN_CURRENCY_MAP.get(domain_id, "USD")
+
+    def _history_price(self, product: dict[str, Any], history_keys: tuple[str, ...]) -> Decimal | None:
+        for history_key in history_keys:
+            fallback_value = self._extract_latest_history_price(product, history_key)
+            if fallback_value is not None:
+                return fallback_value
+        return None
+
+    def _extract_latest_history_price(self, product: dict[str, Any], history_key: str) -> Decimal | None:
+        data = product.get("data")
+        if isinstance(data, dict):
+            prices = data.get(history_key)
+            if isinstance(prices, list):
+                for raw_price in reversed(prices):
+                    price = self._to_decimal(raw_price)
+                    if price is not None:
+                        return price
+
+        csv_history = product.get("csv")
+        if not isinstance(csv_history, list):
+            return None
+
+        csv_index = KEEPA_CSV_HISTORY_INDEX.get(history_key)
+        if csv_index is None or csv_index >= len(csv_history):
+            return None
+
+        raw_series = csv_history[csv_index]
+        if not isinstance(raw_series, list):
+            return None
+
+        for offset in range(len(raw_series) - 1, 0, -2):
+            price = self._to_decimal(raw_series[offset])
+            if price is not None:
+                return price
+        return None
 
     def _extract_observed_at(self, product: dict[str, Any]):
         from datetime import datetime, timezone
@@ -137,6 +192,9 @@ class KeepaParser(SourceParser):
         if last_update is None:
             return datetime.now(timezone.utc)
         try:
-            return datetime.fromtimestamp(int(last_update) * 60, tz=timezone.utc)
+            converted = keepa_minutes_to_datetime(last_update)
+            if converted is not None:
+                return converted
+            return datetime.now(timezone.utc)
         except Exception:
             return datetime.now(timezone.utc)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from decimal import Decimal
 
+from app.ingestion.amazon_identifiers import extract_amazon_asin_from_url, normalize_asin
 from app.ingestion.exceptions import RecordRejectedError
 from app.ingestion.interfaces import RecordNormalizer
 from app.ingestion.schemas import NormalizedIngestionRecord, ParsedSourceRecord
@@ -51,6 +52,12 @@ class DefaultRecordNormalizer(RecordNormalizer):
         shipping_price = record.shipping_price if record.shipping_price and record.shipping_price >= 0 else None
         total_price = current_price + (shipping_price or Decimal("0"))
         merchant_name = self._clean_string(record.merchant_name)
+        source_attributes = {
+            **record.source_attributes,
+            "asin": self._resolved_asin(record),
+            "variant_parse": parsed_variant.as_dict(),
+            "title_normalization": extracted_features.as_dict(),
+        }
 
         return NormalizedIngestionRecord(
             normalized_name=normalized_name,
@@ -73,11 +80,7 @@ class DefaultRecordNormalizer(RecordNormalizer):
             source_brand=self._clean_string(record.brand),
             source_description=self._clean_string(record.description),
             source_category=self._clean_string(record.category),
-            source_attributes={
-                **record.source_attributes,
-                "variant_parse": parsed_variant.as_dict(),
-                "title_normalization": extracted_features.as_dict(),
-            },
+            source_attributes=source_attributes,
             raw_payload=record.raw_payload,
             observed_at=record.observed_at,
             pack_count=pack_count,
@@ -109,3 +112,9 @@ class DefaultRecordNormalizer(RecordNormalizer):
     def _slugify(self, value: str) -> str:
         slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
         return slug or "unknown"
+
+    def _resolved_asin(self, record: ParsedSourceRecord) -> str | None:
+        existing_asin = normalize_asin((record.source_attributes or {}).get("asin"))
+        if existing_asin:
+            return existing_asin
+        return extract_amazon_asin_from_url(self._clean_string(record.product_url))

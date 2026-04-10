@@ -6,6 +6,7 @@ from io import StringIO
 from typing import Any
 
 from app.db.enums import AvailabilityStatus
+from app.ingestion.amazon_identifiers import normalize_asin
 from app.ingestion.interfaces import SourceParser
 from app.ingestion.schemas import ParsedSourceRecord
 
@@ -46,9 +47,14 @@ class AffiliateFeedCSVParser(SourceParser):
             material=(row.get("material") or "").strip() or None,
             is_bundle=self._to_bool(row.get("is_bundle")),
             source_attributes={
+                "asin": normalize_asin(row.get("asin")),
                 "gtin": row.get("gtin"),
                 "sku": row.get("sku"),
                 "mpn": row.get("mpn"),
+                "source_link_type": (row.get("source_link_type") or "").strip() or None,
+                "is_google_redirect": self._to_optional_bool(row.get("is_google_redirect")),
+                "merchant_confidence": (row.get("merchant_confidence") or "").strip() or None,
+                "merchant_label_source": (row.get("merchant_label_source") or "").strip() or None,
             },
             raw_payload={key: value for key, value in row.items()},
         )
@@ -80,6 +86,11 @@ class AffiliateFeedCSVParser(SourceParser):
         if value is None:
             return False
         return str(value).strip().lower() in {"1", "true", "yes", "y"}
+
+    def _to_optional_bool(self, value: Any) -> bool | None:
+        if value in (None, ""):
+            return None
+        return self._to_bool(value)
 
     def _availability_from_text(self, value: Any) -> AvailabilityStatus:
         normalized = str(value or "").strip().lower()

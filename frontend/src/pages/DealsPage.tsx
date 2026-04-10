@@ -1,17 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { api, ApiError } from "../lib/api";
+import { api, getApiErrorMessage } from "../lib/api";
 import type { Deal } from "../types";
 import { Badge } from "../components/Badge";
 import { DealSummary } from "../components/DealSummary";
 import { StatusMessage } from "../components/StatusMessage";
-import { formatDateTime, formatMoney } from "../lib/format";
+import { formatDateTime, formatMoney, formatPercent, toTimestamp } from "../lib/format";
+import { getHistorySupportSummary, getPublicationReadiness, getQualityScore, getSavingsPercentValue, getSourceLabel } from "../lib/dealSignals";
+
+type DealSort = "newest" | "score" | "savings" | "status";
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return `Request failed: ${error.message}`;
-  }
-  return "Something went wrong while talking to the API.";
+  return getApiErrorMessage(error, "Something went wrong while talking to the API.");
 }
 
 export function DealsPage() {
@@ -19,6 +19,7 @@ export function DealsPage() {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<DealSort>("newest");
 
   useEffect(() => {
     async function loadDeals() {
@@ -48,6 +49,32 @@ export function DealsPage() {
     }
   }
 
+  const visibleDeals = useMemo(() => {
+    return [...deals].sort((left, right) => {
+      if (sortBy === "score") {
+        return getQualityScore(right) - getQualityScore(left);
+      }
+      if (sortBy === "savings") {
+        return getSavingsPercentValue(right) - getSavingsPercentValue(left);
+      }
+      if (sortBy === "status") {
+        return left.status.localeCompare(right.status) || (toTimestamp(right.detected_at) ?? 0) - (toTimestamp(left.detected_at) ?? 0);
+      }
+      return (toTimestamp(right.detected_at) ?? 0) - (toTimestamp(left.detected_at) ?? 0);
+    });
+  }, [deals, sortBy]);
+
+  useEffect(() => {
+    if (!selectedDeal && visibleDeals[0]) {
+      setSelectedDeal(visibleDeals[0]);
+      return;
+    }
+
+    if (selectedDeal && !visibleDeals.some((deal) => deal.id === selectedDeal.id)) {
+      setSelectedDeal(visibleDeals[0] ?? null);
+    }
+  }, [selectedDeal, visibleDeals]);
+
   if (isLoading) {
     return <StatusMessage tone="info" title="Loading deals" detail="Fetching current deals from the API." />;
   }
@@ -64,7 +91,18 @@ export function DealsPage() {
           <h1>Current Deals</h1>
           <p className="screen-subtitle">Browse current deal records and inspect the latest detail payload.</p>
         </div>
-        <span className="counter">{deals.length} deals</span>
+        <div className="header-meta">
+          <span className="counter">{deals.length} deals</span>
+          <label className="filter-control">
+            <span>Sort</span>
+            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as DealSort)}>
+              <option value="newest">Newest</option>
+              <option value="score">Score</option>
+              <option value="savings">Savings %</option>
+              <option value="status">Status</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       {deals.length === 0 ? (
@@ -85,24 +123,45 @@ export function DealsPage() {
                 </tr>
               </thead>
               <tbody>
-                {deals.map((deal) => (
+                {visibleDeals.map((deal) => {
+                  const publicationState = getPublicationReadiness(deal);
+                  const sourceLabel = getSourceLabel(deal.deal_url);
+
+                  return (
                   <tr key={deal.id} className={deal.id === selectedDeal?.id ? "row-active" : ""}>
                     <td>
-                      <Badge value={deal.status} />
+                      <div className="badge-cluster badge-cluster-wrap">
+                        <Badge value={deal.status} />
+                        <Badge value={publicationState.label} tone={publicationState.tone} />
+                      </div>
                     </td>
                     <td className="table-title-cell">
                       <div className="table-title">{deal.title}</div>
-                      <div className="table-subtitle">{deal.summary ?? "No summary provided."}</div>
+                      <div className="table-subtitle">
+                        {deal.summary ?? "No summary provided."}
+                        {sourceLabel ? ` • ${sourceLabel}` : ""}
+                      </div>
                     </td>
-                    <td>{formatMoney(deal.current_price, deal.currency)}</td>
-                    <td>{formatDateTime(deal.detected_at)}</td>
+                    <td>
+                      <div>{formatMoney(deal.current_price, deal.currency)}</div>
+                      <div className="table-subtitle">
+                        {formatMoney(deal.previous_price, deal.currency)} baseline • {formatPercent(deal.savings_percent)}
+                      </div>
+                      <div className="table-subtitle">
+                        Save {formatMoney(deal.savings_amount, deal.currency)} • Q{deal.score_breakdown.quality_score ?? "—"}
+                      </div>
+                    </td>
+                    <td>
+                      <div>{formatDateTime(deal.detected_at)}</div>
+                      <div className="table-subtitle">{getHistorySupportSummary(deal)}</div>
+                    </td>
                     <td>
                       <button className="inline-button" onClick={() => void inspectDeal(deal.id)}>
                         Inspect
                       </button>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>

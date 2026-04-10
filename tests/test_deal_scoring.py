@@ -8,7 +8,7 @@ from app.pricing.schemas import (
     FakeDiscountFlag,
     PriceAggregation,
 )
-from app.pricing.scoring import score_business_priority, score_deal, score_deal_quality
+from app.pricing.scoring import classify_source_link_quality, score_business_priority, score_deal, score_deal_quality
 
 
 def make_aggregation(**overrides) -> PriceAggregation:
@@ -90,3 +90,175 @@ def test_score_deal_separates_quality_and_business() -> None:
     assert scored.quality.promotable is True
     assert scored.quality.score > 0
     assert scored.business.score == 45
+
+
+def test_strong_history_support_beats_weak_history_support() -> None:
+    strong_quality = score_deal_quality(
+        make_input(
+            aggregation=make_aggregation(
+                observation_count_30d=20,
+                observation_count_90d=50,
+                observation_count_all_time=120,
+            )
+        )
+    )
+    weak_quality = score_deal_quality(
+        make_input(
+            aggregation=make_aggregation(
+                observation_count_30d=2,
+                observation_count_90d=4,
+                observation_count_all_time=8,
+            )
+        )
+    )
+
+    assert strong_quality.score > weak_quality.score
+    assert "strong_history_support" in strong_quality.reasons
+    assert "weak_discount_support" in weak_quality.reasons
+
+
+def test_shallow_history_discount_gets_penalized() -> None:
+    quality = score_deal_quality(
+        make_input(
+            aggregation=make_aggregation(
+                observation_count_30d=1,
+                observation_count_90d=3,
+                observation_count_all_time=6,
+            )
+        )
+    )
+
+    assert "weak_discount_support" in quality.reasons
+    assert quality.score <= 80
+
+
+def test_stable_history_scores_better_than_noisy_history() -> None:
+    stable_quality = score_deal_quality(
+        make_input(
+            aggregation=make_aggregation(
+                avg_90d=Decimal("100.00"),
+                min_90d=Decimal("95.00"),
+                max_90d=Decimal("105.00"),
+                observation_count_30d=20,
+                observation_count_90d=50,
+                observation_count_all_time=120,
+            )
+        )
+    )
+    noisy_quality = score_deal_quality(
+        make_input(
+            aggregation=make_aggregation(
+                avg_90d=Decimal("100.00"),
+                min_90d=Decimal("50.00"),
+                max_90d=Decimal("150.00"),
+                observation_count_30d=20,
+                observation_count_90d=50,
+                observation_count_all_time=120,
+            )
+        )
+    )
+
+    assert stable_quality.score > noisy_quality.score
+    assert "stable_price_history" in stable_quality.reasons
+    assert "volatile_price_history" in noisy_quality.reasons
+
+
+def test_bad_quality_input_cannot_reach_unrealistically_strong_score() -> None:
+    quality = score_deal_quality(
+        make_input(
+            claimed_old_price=Decimal("140.00"),
+            aggregation=make_aggregation(
+                observation_count_30d=1,
+                observation_count_90d=2,
+                observation_count_all_time=4,
+                avg_90d=Decimal("140.00"),
+                min_90d=Decimal("70.00"),
+                max_90d=Decimal("140.00"),
+            ),
+        )
+    )
+
+    assert quality.score < 90
+    assert "weak_discount_support" in quality.reasons
+
+
+def test_historically_strong_low_price_scores_better_than_non_low_supported_price() -> None:
+    strong_low_quality = score_deal_quality(
+        make_input(
+            current_price=Decimal("70.00"),
+            claimed_old_price=Decimal("95.00"),
+            aggregation=make_aggregation(
+                current_price=Decimal("70.00"),
+                avg_30d=Decimal("95.00"),
+                avg_90d=Decimal("96.00"),
+                min_90d=Decimal("70.00"),
+                max_90d=Decimal("110.00"),
+                all_time_min=Decimal("70.00"),
+                observation_count_30d=12,
+                observation_count_90d=30,
+                observation_count_all_time=60,
+            ),
+        )
+    )
+    non_low_quality = score_deal_quality(
+        make_input(
+            current_price=Decimal("80.00"),
+            claimed_old_price=Decimal("95.00"),
+            aggregation=make_aggregation(
+                current_price=Decimal("80.00"),
+                avg_30d=Decimal("95.00"),
+                avg_90d=Decimal("96.00"),
+                min_90d=Decimal("70.00"),
+                max_90d=Decimal("110.00"),
+                all_time_min=Decimal("70.00"),
+                observation_count_30d=12,
+                observation_count_90d=30,
+                observation_count_all_time=60,
+            ),
+        )
+    )
+
+    assert strong_low_quality.score > non_low_quality.score
+    assert "at_all_time_low" in strong_low_quality.reasons
+
+
+def test_noisy_history_discount_does_not_overstate_confidence() -> None:
+    quality = score_deal_quality(
+        make_input(
+            current_price=Decimal("70.00"),
+            claimed_old_price=Decimal("100.00"),
+            aggregation=make_aggregation(
+                current_price=Decimal("70.00"),
+                avg_30d=Decimal("100.00"),
+                avg_90d=Decimal("100.00"),
+                min_90d=Decimal("45.00"),
+                max_90d=Decimal("155.00"),
+                observation_count_30d=18,
+                observation_count_90d=45,
+                observation_count_all_time=90,
+            ),
+        )
+    )
+
+    assert "volatile_price_history" in quality.reasons
+    assert quality.score <= 90
+
+
+def test_business_score_penalizes_indirect_source_link() -> None:
+    business = score_business_priority(
+        make_input(
+            merchant_priority=20,
+            source_priority=15,
+            category_priority=10,
+            source_link_quality="indirect_redirect",
+        ),
+        promotable=True,
+    )
+
+    assert business.score == 35
+    assert "indirect_source_link" in business.reasons
+
+
+def test_classify_source_link_quality_detects_google_redirects() -> None:
+    assert classify_source_link_quality("https://www.google.com/shopping/product/123") == "indirect_redirect"
+    assert classify_source_link_quality("https://www.amazon.com/dp/B0TEST") == "direct"

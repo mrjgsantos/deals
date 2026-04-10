@@ -51,6 +51,7 @@ class DealScoringInput:
     merchant_priority: int = 0
     source_priority: int = 0
     category_priority: int = 0
+    source_link_quality: str | None = None
 
 
 @dataclass(slots=True)

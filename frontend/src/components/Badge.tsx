@@ -1,6 +1,6 @@
 import { toSentenceCase } from "../lib/format";
 
-type BadgeTone = "neutral" | "success" | "danger" | "warning";
+export type BadgeTone = "neutral" | "success" | "danger" | "warning";
 
 const toneClassName: Record<BadgeTone, string> = {
   neutral: "badge badge-neutral",

@@ -1,0 +1,17 @@
+[
+  {
+    "query": "wireless earbuds",
+    "limit": 5,
+    "enabled": true
+  },
+  {
+    "query": "air fryer",
+    "limit": 5,
+    "enabled": true
+  },
+  {
+    "query": "robot vacuum",
+    "limit": 5,
+    "enabled": true
+  }
+]

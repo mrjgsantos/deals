@@ -25,6 +25,7 @@ class PriceStatisticWindow(StrEnum):
 class DealStatus(StrEnum):
     PENDING_REVIEW = "pending_review"
     APPROVED = "approved"
+    PUBLISHED = "published"
     EXPIRED = "expired"
     REJECTED = "rejected"
 

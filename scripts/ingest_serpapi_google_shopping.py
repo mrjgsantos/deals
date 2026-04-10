@@ -10,6 +10,7 @@ import sys
 from io import StringIO
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy import select
@@ -20,6 +21,10 @@ from app.core.config import settings
 from app.db.enums import SourceType
 from app.db.models import Source
 from app.db.session import SessionLocal
+from app.ingestion.normalization import DefaultRecordNormalizer
+from app.ingestion.parsers.affiliate_feed import AffiliateFeedCSVParser
+from app.ingestion.service import IngestionService
+from app.matching.service import MatchingService
 
 SOURCE_SLUG = "serpapi-google-shopping"
 SOURCE_NAME = "SerpApi Google Shopping"
@@ -49,11 +54,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def env(name: str, *, default: str | None = None, required: bool = False) -> str:
-    value = os.getenv(name, default)
-    if required and not value:
+def _setting(name: str, value: str | None, *, default: str | None = None, required: bool = False) -> str:
+    resolved = value or os.getenv(name) or default
+    if required and not resolved:
         raise SystemExit(f"Missing required environment variable: {name}")
-    return value or ""
+    return resolved or ""
 
 
 def ensure_source() -> None:
@@ -66,7 +71,7 @@ def ensure_source() -> None:
                 source_type=SourceType.AFFILIATE_FEED,
                 base_url="https://serpapi.com",
                 is_active=True,
-                config={"parser": "affiliate_csv", "engine": env("SERPAPI_ENGINE", default="google_shopping")},
+                config={"parser": "affiliate_csv", "engine": _setting("SERPAPI_ENGINE", settings.serpapi_engine, default="google_shopping")},
             )
             db.add(source)
         else:
@@ -74,18 +79,21 @@ def ensure_source() -> None:
             source.source_type = SourceType.AFFILIATE_FEED
             source.base_url = "https://serpapi.com"
             source.is_active = True
-            source.config = {"parser": "affiliate_csv", "engine": env("SERPAPI_ENGINE", default="google_shopping")}
+            source.config = {
+                "parser": "affiliate_csv",
+                "engine": _setting("SERPAPI_ENGINE", settings.serpapi_engine, default="google_shopping"),
+            }
         db.commit()
 
 
 def fetch_results(query: str, limit: int) -> list[dict[str, Any]]:
     params = {
-        "engine": env("SERPAPI_ENGINE", default="google_shopping"),
-        "api_key": env("SERPAPI_API_KEY", required=True),
+        "engine": _setting("SERPAPI_ENGINE", settings.serpapi_engine, default="google_shopping"),
+        "api_key": _setting("SERPAPI_API_KEY", settings.serpapi_api_key, required=True),
         "q": query,
-        "gl": env("SERPAPI_COUNTRY", default="us"),
-        "hl": env("SERPAPI_LANGUAGE", default="en"),
-        "location": env("SERPAPI_LOCATION", required=True),
+        "gl": _setting("SERPAPI_COUNTRY", settings.serpapi_country, default="us"),
+        "hl": _setting("SERPAPI_LANGUAGE", settings.serpapi_language, default="en"),
+        "location": _setting("SERPAPI_LOCATION", settings.serpapi_location, required=True),
         "num": max(1, min(limit, 10)),
     }
 
@@ -146,9 +154,65 @@ def build_external_id(result: dict[str, Any], product_url: str, title: str) -> s
     return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
 
+def extract_merchant_label(result: dict[str, Any]) -> tuple[str | None, str]:
+    source_label = _clean_string(result.get("source"))
+    if source_label:
+        return source_label, "source"
+
+    merchant_name = _clean_string(result.get("merchant_name"))
+    if merchant_name:
+        return merchant_name, "merchant_name"
+
+    return None, "none"
+
+
+def classify_source_link_type(product_url: str | None) -> str:
+    if not product_url:
+        return "unknown"
+
+    try:
+        parsed = urlparse(product_url)
+    except ValueError:
+        return "unknown"
+
+    host = (parsed.netloc or "").casefold()
+    if not host:
+        return "unknown"
+    if "google." in host:
+        return "google_redirect"
+    return "direct_merchant"
+
+
+def classify_merchant_confidence(merchant_name: str | None, source_link_type: str) -> str:
+    if not merchant_name:
+        return "low"
+    if source_link_type == "direct_merchant":
+        return "high"
+    if source_link_type == "google_redirect":
+        return "medium"
+    return "low"
+
+
+def _clean_string(value: Any) -> str | None:
+    cleaned = str(value or "").strip()
+    return cleaned or None
+
+
 def to_affiliate_csv(results: list[dict[str, Any]], limit: int) -> tuple[str, int]:
     output = StringIO()
-    fieldnames = ["id", "url", "title", "merchant", "price", "currency", "image_url"]
+    fieldnames = [
+        "id",
+        "url",
+        "title",
+        "merchant",
+        "price",
+        "currency",
+        "image_url",
+        "source_link_type",
+        "is_google_redirect",
+        "merchant_confidence",
+        "merchant_label_source",
+    ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -165,15 +229,24 @@ def to_affiliate_csv(results: list[dict[str, Any]], limit: int) -> tuple[str, in
         if not title or not product_url or not price or not currency:
             continue
 
+        merchant_name, merchant_label_source = extract_merchant_label(result)
+        source_link_type = classify_source_link_type(product_url)
+        is_google_redirect = source_link_type == "google_redirect"
+        merchant_confidence = classify_merchant_confidence(merchant_name, source_link_type)
+
         writer.writerow(
             {
                 "id": build_external_id(result, product_url, title),
                 "url": product_url,
                 "title": title,
-                "merchant": str(result.get("source") or result.get("merchant_name") or "").strip() or None,
+                "merchant": merchant_name,
                 "price": price,
                 "currency": currency,
                 "image_url": str(result.get("thumbnail") or result.get("image") or "").strip() or None,
+                "source_link_type": source_link_type,
+                "is_google_redirect": "true" if is_google_redirect else "false",
+                "merchant_confidence": merchant_confidence,
+                "merchant_label_source": merchant_label_source,
             }
         )
         accepted += 1
@@ -197,24 +270,45 @@ def ingest_csv(csv_payload: str, api_base_url: str) -> dict[str, Any]:
         return response.json()
 
 
+def ingest_csv_direct(csv_payload: str) -> dict[str, Any]:
+    ensure_source()
+    service = IngestionService(
+        parser=AffiliateFeedCSVParser(),
+        normalizer=DefaultRecordNormalizer(),
+        matcher=MatchingService(),
+    )
+    with SessionLocal() as db:
+        result = service.ingest(db, source_slug=SOURCE_SLUG, payload=csv_payload, commit=True)
+        return result.model_dump(mode="json")
+
+
+def run_serpapi_ingestion_query(
+    query: str,
+    limit: int,
+    *,
+    ingest_runner,
+) -> dict[str, Any]:
+    results = fetch_results(query, limit)
+    csv_payload, mapped_count = to_affiliate_csv(results, limit)
+    ingest_result = ingest_runner(csv_payload)
+    return {
+        "query": query,
+        "fetched_results": len(results),
+        "mapped_results": mapped_count,
+        "ingest_result": ingest_result,
+    }
+
+
 def main() -> int:
     args = parse_args()
     ensure_source()
-    results = fetch_results(args.query, args.limit)
-    csv_payload, mapped_count = to_affiliate_csv(results, args.limit)
-    ingest_result = ingest_csv(csv_payload, args.api_base_url)
-
-    print(
-        json.dumps(
-            {
-                "query": args.query,
-                "fetched_results": len(results),
-                "mapped_results": mapped_count,
-                "ingest_result": ingest_result,
-            },
-            indent=2,
-        )
+    result = run_serpapi_ingestion_query(
+        args.query,
+        args.limit,
+        ingest_runner=lambda csv_payload: ingest_csv(csv_payload, args.api_base_url),
     )
+
+    print(json.dumps(result, indent=2))
     return 0
 
 

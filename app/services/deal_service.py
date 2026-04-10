@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -11,6 +12,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.db.enums import AICopyType, DealStatus, ReviewStatus, ReviewType
 from app.db.models import AICopyDraft, Deal, ReviewQueue
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -29,8 +32,16 @@ class DealRecord:
     product_variant_id: UUID | None
     product_source_record_id: UUID | None
     detected_at: Any
+    published_at: Any | None
     score_breakdown: dict[str, Any]
     ai_copy_draft: dict[str, Any] | None
+
+
+@dataclass(slots=True)
+class DealPublicationResult:
+    deal_id: UUID
+    deal_status: str
+    published_at: datetime
 
 
 @dataclass(slots=True)
@@ -78,6 +89,7 @@ class DealQueryService:
             product_variant_id=deal.product_variant_id,
             product_source_record_id=deal.product_source_record_id,
             detected_at=deal.detected_at,
+            published_at=deal.published_at,
             score_breakdown=self._extract_score_breakdown(deal),
             ai_copy_draft=self._extract_ai_draft(deal.ai_copy_drafts),
         )
@@ -91,6 +103,7 @@ class DealQueryService:
             "business_reasons": metadata.get("business_reasons", []),
             "promotable": metadata.get("promotable", False),
             "fake_discount": metadata.get("fake_discount", False),
+            "price_history": metadata.get("price_aggregation"),
         }
 
     def _extract_ai_draft(self, drafts: list[AICopyDraft]) -> dict[str, Any] | None:
@@ -138,4 +151,39 @@ class DealQueryService:
             created_at=item.created_at,
             resolved_at=item.resolved_at,
             deal=self._to_record(deal),
+        )
+
+
+class DealPublicationService:
+    def mark_published(self, db: Session, deal_id: UUID) -> DealPublicationResult:
+        deal = db.get(Deal, deal_id)
+        if deal is None:
+            raise ValueError("deal_not_found")
+        if deal.status not in {DealStatus.APPROVED, DealStatus.PUBLISHED}:
+            raise ValueError("invalid_deal_state")
+        if deal.published_at is None or deal.status != DealStatus.PUBLISHED:
+            previous_status = deal.status.value
+            deal.published_at = datetime.now(timezone.utc)
+            deal.status = DealStatus.PUBLISHED
+            db.add(deal)
+            db.commit()
+            db.refresh(deal)
+            logger.info(
+                "deal_publication_marked deal_id=%s previous_status=%s current_status=%s published_at=%s",
+                deal.id,
+                previous_status,
+                deal.status.value,
+                deal.published_at.isoformat(),
+            )
+        else:
+            logger.info(
+                "deal_publication_noop deal_id=%s current_status=%s published_at=%s",
+                deal.id,
+                deal.status.value,
+                deal.published_at.isoformat(),
+            )
+        return DealPublicationResult(
+            deal_id=deal.id,
+            deal_status=deal.status.value,
+            published_at=deal.published_at,
         )

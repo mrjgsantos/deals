@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -22,11 +23,20 @@ from app.db.models import (
 from app.ingestion.exceptions import PayloadValidationError, RecordRejectedError, SourceNotFoundError
 from app.ingestion.interfaces import RecordNormalizer, SourceParser
 from app.ingestion.schemas import IngestionBatchResult, IngestionRecordResult, NormalizedIngestionRecord
+from app.integrations.keepa_client import fetch_product_by_asin
+from app.integrations.keepa_fetch_policy import (
+    KeepaFetchContext,
+    KeepaFetchRunState,
+    should_fetch_keepa_for_record,
+)
+from app.integrations.keepa_history import extract_keepa_price_points
 from app.matching.service import MatchingService
 from app.matching.types import Matcher
+from app.pricing.aggregation import aggregate_price_history_for_variant
 from app.services.deal_generation_service import DealGenerationService
 
 logger = logging.getLogger(__name__)
+MAX_KEEPA_HISTORY_POINTS = 90
 
 
 class IngestionService:
@@ -47,6 +57,14 @@ class IngestionService:
         parsed_records = self.parser.parse(payload)
         self._validate_parsed_records(parsed_records)
         result = IngestionBatchResult(source_slug=source.slug, parser_name=self.parser.parser_name)
+        keepa_run_state = KeepaFetchRunState()
+        logger.info(
+            "ingestion_batch_started source=%s parser=%s parsed_record_count=%s commit=%s",
+            source.slug,
+            self.parser.parser_name,
+            len(parsed_records),
+            commit,
+        )
 
         for parsed_record in parsed_records:
             result.processed += 1
@@ -68,6 +86,7 @@ class IngestionService:
                         source=source,
                         raw_record=raw_record,
                         normalized=normalized,
+                        keepa_run_state=keepa_run_state,
                     )
                 result.accepted += 1
                 result.records.append(write_result)
@@ -107,6 +126,14 @@ class IngestionService:
 
         if commit:
             db.commit()
+        logger.info(
+            "ingestion_batch_complete source=%s parser=%s processed=%s accepted=%s rejected=%s",
+            source.slug,
+            self.parser.parser_name,
+            result.processed,
+            result.accepted,
+            result.rejected,
+        )
         return result
 
     def _persist_normalized_record(
@@ -115,6 +142,7 @@ class IngestionService:
         source: Source,
         raw_record: RawIngestionRecord,
         normalized: NormalizedIngestionRecord,
+        keepa_run_state: KeepaFetchRunState | None = None,
     ) -> IngestionRecordResult:
         match_decision = self.matcher.match_normalized_record(db, normalized)
         merchant = self._get_or_create_merchant(db, normalized)
@@ -157,6 +185,20 @@ class IngestionService:
             normalized=normalized,
             source_slug=source.slug,
         )
+        keepa_history_inserted = self._persist_keepa_history_observations_safely(
+            db=db,
+            source=source,
+            product_source_record=product_source_record,
+            normalized=normalized,
+        )
+        keepa_fetch_inserted = self._enrich_with_keepa_history_if_needed_safely(
+            db=db,
+            source=source,
+            product_source_record=product_source_record,
+            product_variant=product_variant,
+            normalized=normalized,
+            keepa_run_state=keepa_run_state,
+        )
 
         raw_record.status = "duplicate" if duplicate_observation else "accepted"
         raw_record.product_source_record = product_source_record
@@ -167,6 +209,21 @@ class IngestionService:
             source=source,
             product_source_record=product_source_record,
             price_observation=price_observation,
+        )
+        logger.info(
+            "ingestion_record_persisted source=%s external_id=%s status=%s match_strategy=%s match_reason=%s matched=%s duplicate_observation=%s keepa_history_inserted=%s keepa_fetch_inserted=%s product_source_record_id=%s product_variant_id=%s price_observation_id=%s",
+            source.slug,
+            normalized.external_id,
+            raw_record.status,
+            match_decision.match_strategy,
+            match_decision.reason,
+            match_decision.matched,
+            duplicate_observation,
+            keepa_history_inserted,
+            keepa_fetch_inserted,
+            product_source_record.id,
+            product_variant.id if product_variant is not None else None,
+            price_observation.id,
         )
 
         return IngestionRecordResult(
@@ -383,20 +440,350 @@ class IngestionService:
         return price_observation, False
 
     def _build_observed_hash(self, normalized: NormalizedIngestionRecord, source_slug: str) -> str:
+        return self._build_observed_hash_for_values(
+            source_slug=source_slug,
+            external_id=normalized.external_id,
+            currency=normalized.currency,
+            current_price=normalized.current_price,
+            list_price=normalized.list_price,
+            shipping_price=normalized.shipping_price,
+            total_price=normalized.total_price,
+            availability_status=normalized.availability_status,
+            observed_at=normalized.observed_at,
+        )
+
+    def _build_observed_hash_for_values(
+        self,
+        *,
+        source_slug: str,
+        external_id: str,
+        currency: str,
+        current_price,
+        list_price,
+        shipping_price,
+        total_price,
+        availability_status: AvailabilityStatus,
+        observed_at: datetime,
+    ) -> str:
         payload = {
             "source_slug": source_slug,
-            "external_id": normalized.external_id,
-            "currency": normalized.currency,
-            "current_price": str(normalized.current_price),
-            "list_price": str(normalized.list_price) if normalized.list_price is not None else None,
-            "shipping_price": str(normalized.shipping_price) if normalized.shipping_price is not None else None,
-            "total_price": str(normalized.total_price),
-            "availability_status": normalized.availability_status.value,
-            "observed_at": normalized.observed_at.isoformat(),
+            "external_id": external_id,
+            "currency": currency,
+            "current_price": str(current_price),
+            "list_price": str(list_price) if list_price is not None else None,
+            "shipping_price": str(shipping_price) if shipping_price is not None else None,
+            "total_price": str(total_price),
+            "availability_status": availability_status.value,
+            "observed_at": observed_at.isoformat(),
         }
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
+
+    def _persist_keepa_history_observations_safely(
+        self,
+        db: Session,
+        source: Source,
+        product_source_record: ProductSourceRecord,
+        normalized: NormalizedIngestionRecord,
+    ) -> int:
+        try:
+            inserted = self._persist_keepa_history_observations(
+                db=db,
+                source=source,
+                product_source_record=product_source_record,
+                normalized=normalized,
+            )
+            if inserted > 0:
+                logger.info(
+                    "keepa_history_persisted source=%s external_id=%s asin=%s inserted=%s product_source_record_id=%s",
+                    source.slug,
+                    normalized.external_id,
+                    (normalized.source_attributes or {}).get("asin"),
+                    inserted,
+                    product_source_record.id,
+                )
+            elif source.slug == "amazon-keepa" and (normalized.source_attributes or {}).get("asin"):
+                logger.info(
+                    "keepa_history_unavailable source=%s external_id=%s asin=%s reason=no_history_points product_source_record_id=%s",
+                    source.slug,
+                    normalized.external_id,
+                    (normalized.source_attributes or {}).get("asin"),
+                    product_source_record.id,
+                )
+            return inserted
+        except Exception:
+            logger.exception(
+                "keepa_history_enrichment_failed source=%s product_source_record_id=%s external_id=%s",
+                source.slug,
+                product_source_record.id,
+                normalized.external_id,
+            )
+            return 0
+
+    def _persist_keepa_history_observations(
+        self,
+        db: Session,
+        source: Source,
+        product_source_record: ProductSourceRecord,
+        normalized: NormalizedIngestionRecord,
+    ) -> int:
+        if source.slug != "amazon-keepa":
+            return 0
+        if not (normalized.source_attributes or {}).get("asin"):
+            return 0
+
+        return self._persist_keepa_history_observations_from_payload(
+            db=db,
+            source=source,
+            product_source_record=product_source_record,
+            normalized=normalized,
+            keepa_product_payload=normalized.raw_payload,
+        )
+
+    def _persist_keepa_history_observations_from_payload(
+        self,
+        db: Session,
+        source: Source,
+        product_source_record: ProductSourceRecord,
+        normalized: NormalizedIngestionRecord,
+        *,
+        keepa_product_payload: dict[str, Any],
+    ) -> int:
+        history_points = extract_keepa_price_points(keepa_product_payload, history_key="NEW")
+        if not history_points:
+            history_points = extract_keepa_price_points(keepa_product_payload, history_key="AMAZON")
+        if not history_points:
+            return 0
+
+        filtered_points = self._recent_unique_keepa_history_points(history_points=history_points, normalized=normalized)
+        inserted = 0
+        for point in filtered_points:
+            observed_hash = self._build_observed_hash_for_values(
+                source_slug=source.slug,
+                external_id=normalized.external_id,
+                currency=normalized.currency,
+                current_price=point.sale_price,
+                list_price=None,
+                shipping_price=None,
+                total_price=point.sale_price,
+                availability_status=AvailabilityStatus.UNKNOWN,
+                observed_at=point.observed_at,
+            )
+            existing = self._find_existing_price_observation_by_hash(
+                db,
+                product_source_record_id=product_source_record.id,
+                observed_hash=observed_hash,
+            )
+            if existing is not None:
+                continue
+
+            db.add(
+                PriceObservation(
+                    product_source_record=product_source_record,
+                    observed_at=point.observed_at,
+                    currency=normalized.currency,
+                    list_price=None,
+                    sale_price=point.sale_price,
+                    shipping_price=None,
+                    total_price=point.sale_price,
+                    in_stock=None,
+                    is_promotional=False,
+                    observed_hash=observed_hash,
+                    metadata_json={
+                        "source": source.slug,
+                        "derived_from": "keepa_history",
+                        "asin": (normalized.source_attributes or {}).get("asin"),
+                    },
+                )
+            )
+            db.flush()
+            inserted += 1
+        return inserted
+
+    def _enrich_with_keepa_history_if_needed_safely(
+        self,
+        db: Session,
+        source: Source,
+        product_source_record: ProductSourceRecord,
+        product_variant: ProductVariant,
+        normalized: NormalizedIngestionRecord,
+        keepa_run_state: KeepaFetchRunState | None,
+    ) -> int:
+        try:
+            return self._enrich_with_keepa_history_if_needed(
+                db=db,
+                source=source,
+                product_source_record=product_source_record,
+                product_variant=product_variant,
+                normalized=normalized,
+                keepa_run_state=keepa_run_state,
+            )
+        except Exception:
+            logger.exception(
+                "keepa_fetch_enrichment_failed source=%s product_source_record_id=%s product_variant_id=%s external_id=%s",
+                source.slug,
+                product_source_record.id,
+                product_variant.id,
+                normalized.external_id,
+            )
+            return 0
+
+    def _enrich_with_keepa_history_if_needed(
+        self,
+        db: Session,
+        source: Source,
+        product_source_record: ProductSourceRecord,
+        product_variant: ProductVariant,
+        normalized: NormalizedIngestionRecord,
+        keepa_run_state: KeepaFetchRunState | None,
+    ) -> int:
+        if source.slug == "amazon-keepa":
+            return 0
+
+        asin = self._clean_identifier((normalized.source_attributes or {}).get("asin"))
+        preliminary = should_fetch_keepa_for_record(
+            KeepaFetchContext(
+                asin=asin,
+                product_variant_id=product_variant.id,
+                source_slug=source.slug,
+                product_url=product_source_record.source_url or str(normalized.product_url),
+            )
+        )
+        if not preliminary.should_fetch and preliminary.reason in {"missing_asin", "not_amazon_relevant"}:
+            logger.info(
+                "keepa_fetch_enrichment_skipped source=%s external_id=%s asin=%s reason=%s",
+                source.slug,
+                normalized.external_id,
+                asin,
+                preliminary.reason,
+            )
+            return 0
+
+        observation_count_30d, observation_count_90d, observation_count_all_time = self._price_history_counts_for_variant(
+            db,
+            product_variant.id,
+            now=normalized.observed_at,
+        )
+        decision = should_fetch_keepa_for_record(
+            KeepaFetchContext(
+                asin=asin,
+                product_variant_id=product_variant.id,
+                source_slug=source.slug,
+                product_url=product_source_record.source_url or str(normalized.product_url),
+                observation_count_30d=observation_count_30d,
+                observation_count_90d=observation_count_90d,
+                observation_count_all_time=observation_count_all_time,
+            ),
+            run_state=keepa_run_state,
+        )
+        if not decision.should_fetch:
+            logger.info(
+                "keepa_fetch_enrichment_skipped source=%s external_id=%s asin=%s reason=%s observation_count_30d=%s observation_count_90d=%s observation_count_all_time=%s next_eligible_at=%s",
+                source.slug,
+                normalized.external_id,
+                asin,
+                decision.reason,
+                observation_count_30d,
+                observation_count_90d,
+                observation_count_all_time,
+                decision.next_eligible_at.isoformat() if decision.next_eligible_at is not None else None,
+            )
+            return 0
+
+        logger.info(
+            "keepa_fetch_enrichment_due source=%s external_id=%s asin=%s reason=%s observation_count_30d=%s observation_count_90d=%s observation_count_all_time=%s",
+            source.slug,
+            normalized.external_id,
+            asin,
+            decision.reason,
+            observation_count_30d,
+            observation_count_90d,
+            observation_count_all_time,
+        )
+        keepa_payload = self._fetch_keepa_payload_for_asin(asin)
+        keepa_product = self._extract_first_keepa_product_payload(keepa_payload)
+        if keepa_product is None:
+            logger.info(
+                "keepa_fetch_enrichment_skipped source=%s external_id=%s asin=%s reason=keepa_product_missing",
+                source.slug,
+                normalized.external_id,
+                asin,
+            )
+            return 0
+        inserted = self._persist_keepa_history_observations_from_payload(
+            db=db,
+            source=source,
+            product_source_record=product_source_record,
+            normalized=normalized,
+            keepa_product_payload=keepa_product,
+        )
+        logger.info(
+            "keepa_fetch_enrichment_complete source=%s external_id=%s asin=%s inserted=%s product_source_record_id=%s",
+            source.slug,
+            normalized.external_id,
+            asin,
+            inserted,
+            product_source_record.id,
+        )
+        return inserted
+
+    def _price_history_counts_for_variant(
+        self,
+        db: Session,
+        product_variant_id,
+        *,
+        now: datetime,
+    ) -> tuple[int, int, int]:
+        aggregation = aggregate_price_history_for_variant(db, product_variant_id, now=now)
+        return (
+            aggregation.observation_count_30d,
+            aggregation.observation_count_90d,
+            aggregation.observation_count_all_time,
+        )
+
+    def _fetch_keepa_payload_for_asin(self, asin: str) -> dict[str, Any]:
+        return asyncio.run(fetch_product_by_asin(asin))
+
+    def _extract_first_keepa_product_payload(self, keepa_payload: dict[str, Any]) -> dict[str, Any] | None:
+        products = keepa_payload.get("products")
+        if not isinstance(products, list):
+            return None
+        return next((product for product in products if isinstance(product, dict)), None)
+
+    def _recent_unique_keepa_history_points(
+        self,
+        *,
+        history_points,
+        normalized: NormalizedIngestionRecord,
+    ):
+        seen: set[tuple[datetime, str]] = set()
+        unique_points = []
+        for point in sorted(history_points, key=lambda item: item.observed_at):
+            if point.observed_at >= normalized.observed_at:
+                continue
+            if point.sale_price == normalized.current_price and point.observed_at.date() == normalized.observed_at.date():
+                continue
+            dedupe_key = (point.observed_at, str(point.sale_price))
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            unique_points.append(point)
+        return unique_points[-MAX_KEEPA_HISTORY_POINTS:]
+
+    def _find_existing_price_observation_by_hash(
+        self,
+        db: Session,
+        *,
+        product_source_record_id,
+        observed_hash: str,
+    ) -> PriceObservation | None:
+        return db.scalar(
+            select(PriceObservation).where(
+                PriceObservation.product_source_record_id == product_source_record_id,
+                PriceObservation.observed_hash == observed_hash,
+            )
+        )
 
     def _clean_identifier(self, value: Any) -> str | None:
         if value is None:

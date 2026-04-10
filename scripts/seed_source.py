@@ -6,6 +6,8 @@ from pathlib import Path
 
 from sqlalchemy import select
 
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 from app.db.enums import SourceType
 from app.db.models import Source
 from app.db.session import SessionLocal

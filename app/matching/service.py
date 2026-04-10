@@ -6,6 +6,8 @@ after an exact miss.
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.ingestion.variant_parser import VariantParseResult, has_critical_variant_conflict
@@ -16,6 +18,8 @@ from app.matching.variant_projection import (
     variant_result_from_candidate,
     variant_result_from_normalized_record,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ExactMatchingService:
@@ -139,6 +143,12 @@ class MatchingService:
     def match_normalized_record(self, db: Session, normalized_record) -> MatchDecision:
         exact_decision = self.exact_matcher.match_normalized_record(db, normalized_record)
         if exact_decision.matched or exact_decision.blocked_reasons:
+            self._log_decision(
+                normalized_record,
+                exact_decision=exact_decision,
+                final_decision=exact_decision,
+                attempted_hybrid=False,
+            )
             return exact_decision
 
         hybrid_decision = self.hybrid_matcher.match_normalized_record(db, normalized_record)
@@ -148,6 +158,43 @@ class MatchingService:
             or hybrid_decision.candidate_product_variant_ids
             or hybrid_decision.reason != "no hybrid match"
         ):
+            self._log_decision(
+                normalized_record,
+                exact_decision=exact_decision,
+                final_decision=hybrid_decision,
+                attempted_hybrid=True,
+            )
             return hybrid_decision
 
+        self._log_decision(
+            normalized_record,
+            exact_decision=exact_decision,
+            final_decision=exact_decision,
+            attempted_hybrid=True,
+        )
         return exact_decision
+
+    def _log_decision(
+        self,
+        normalized_record,
+        *,
+        exact_decision: MatchDecision,
+        final_decision: MatchDecision,
+        attempted_hybrid: bool,
+    ) -> None:
+        debug = final_decision.debug
+        final_strategy = final_decision.match_strategy or ("hybrid_fallback" if attempted_hybrid else "exact")
+        logger.info(
+            "matching_decision external_id=%s attempted_hybrid=%s exact_reason=%s final_strategy=%s matched=%s final_reason=%s match_key=%s match_value=%s blocked_reason_count=%s candidate_count=%s confidence=%s",
+            normalized_record.external_id,
+            attempted_hybrid,
+            exact_decision.reason,
+            final_strategy,
+            final_decision.matched,
+            final_decision.reason,
+            final_decision.match_key,
+            final_decision.match_value,
+            len(final_decision.blocked_reasons or []),
+            debug.candidate_count_considered if debug is not None else len(final_decision.candidate_product_variant_ids or []),
+            final_decision.confidence,
+        )
