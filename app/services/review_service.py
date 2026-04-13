@@ -21,9 +21,11 @@ class ReviewDecisionResult:
 class ReviewService:
     def approve(self, db: Session, review_id: UUID) -> ReviewDecisionResult:
         review_item, deal = self._get_review_item_and_deal(db, review_id)
+        now = datetime.now(timezone.utc)
         review_item.status = ReviewStatus.RESOLVED
-        review_item.resolved_at = datetime.now(timezone.utc)
+        review_item.resolved_at = now
         deal.status = DealStatus.APPROVED
+        deal.published_at = now
         db.add(review_item)
         db.add(deal)
         db.commit()

@@ -10,6 +10,7 @@ services:
       - .env
     environment:
       POSTGRES_SERVER: db
+      ENABLE_BACKGROUND_JOBS: "true"
     depends_on:
       - db
 
