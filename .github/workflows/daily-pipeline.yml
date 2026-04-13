@@ -39,5 +39,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # 👇 ESTE É O FIX CRÍTICO
+      - name: Run database migrations
+        run: python -m alembic upgrade head
+
       - name: Run daily pipeline (with ingestion)
         run: python -m app.jobs.run_daily --include-ingestion
