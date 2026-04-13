@@ -10,6 +10,83 @@ from app.pricing.schemas import (
     ScoredDeal,
 )
 
+HIGH_DEMAND_KEYWORDS = (
+    "tech",
+    "gaming",
+    "audio",
+    "electronics",
+    "electronic",
+    "electrónica",
+    "electronica",
+    "smart home",
+    "smart-home",
+    "monitor",
+    "ssd",
+    "laptop",
+    "tablet",
+    "iphone",
+    "xiaomi",
+    "logitech",
+    "anker",
+    "sony",
+    "playstation",
+    "xbox",
+    "nintendo",
+)
+
+HIGH_RECOGNITION_BRANDS = (
+    "apple",
+    "samsung",
+    "xiaomi",
+    "sony",
+    "logitech",
+    "anker",
+    "philips",
+    "tp-link",
+    "nintendo",
+    "playstation",
+    "xbox",
+    "dyson",
+    "lg",
+)
+
+LOW_SIGNAL_COMMODITY_KEYWORDS = (
+    "bedsheet",
+    "bed sheets",
+    "sabanas",
+    "sábanas",
+    "sheet set",
+    "basic t-shirt",
+    "camiseta basica",
+    "camiseta básica",
+    "legging basico",
+    "legging básico",
+    "insecticida",
+    "repelente de insectos",
+    "rat poison",
+    "raticida",
+    "ratonera",
+    "ratoneras",
+    "mouse trap",
+    "funda para tarjetas",
+    "memory card case",
+    "sd card case",
+    "cable organizer",
+    "organizador de cables",
+    "screen protector",
+)
+
+LOW_SIGNAL_COMMODITY_CATEGORIES = (
+    "bedding",
+    "ropa basica",
+    "basic apparel",
+    "pest control",
+    "vitamins",
+    "supplements",
+    "accessories",
+    "low-value accessories",
+)
+
 
 def score_deal(input_data: DealScoringInput) -> ScoredDeal:
     quality = score_deal_quality(input_data)
@@ -19,6 +96,7 @@ def score_deal(input_data: DealScoringInput) -> ScoredDeal:
 
 def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
     reasons: list[str] = []
+    normalized_text = _normalized_text(input_data)
 
     if input_data.fake_discount_analysis.is_fake_discount:
         reasons.append("fake_discount_detected")
@@ -26,7 +104,10 @@ def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
 
     score = 50
     baseline = _best_baseline(input_data)
+    historical_average = _historical_average_baseline(input_data)
     savings_percent: Decimal | None = None
+    high_demand_category = _is_high_demand_category(normalized_text)
+    recognized_brand = _has_recognized_brand(normalized_text)
 
     if baseline is not None and baseline > 0:
         savings_percent = ((baseline - input_data.current_price) / baseline) * Decimal("100")
@@ -43,6 +124,25 @@ def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
     else:
         score -= 10
         reasons.append("limited_price_history")
+
+    if historical_average is not None and historical_average > 0:
+        historical_discount = ((historical_average - input_data.current_price) / historical_average) * Decimal("100")
+        historical_discount = historical_discount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if historical_discount < Decimal("15"):
+            reasons.append("weak_discount_vs_historical_average")
+            return DealQualityScore(score=0, promotable=False, reasons=reasons)
+
+    if input_data.current_price < Decimal("15") and not high_demand_category:
+        reasons.append("low_price_low_demand")
+        return DealQualityScore(score=0, promotable=False, reasons=reasons)
+
+    if _is_low_signal_commodity(normalized_text):
+        reasons.append("low_signal_commodity")
+        return DealQualityScore(score=0, promotable=False, reasons=reasons)
+
+    if _is_weak_demand_signal(input_data):
+        reasons.append("weak_demand_signal")
+        return DealQualityScore(score=0, promotable=False, reasons=reasons)
 
     if input_data.aggregation.all_time_min is not None:
         if input_data.current_price <= input_data.aggregation.all_time_min:
@@ -67,6 +167,13 @@ def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
     discount_support_adjustment, discount_support_reasons = _discount_support_adjustment(input_data, savings_percent)
     score += discount_support_adjustment
     reasons.extend(discount_support_reasons)
+
+    category_boost, category_reasons = _quality_category_adjustment(
+        high_demand_category=high_demand_category,
+        recognized_brand=recognized_brand,
+    )
+    score += category_boost
+    reasons.extend(category_reasons)
 
     score = max(0, min(100, score))
     promotable = score >= 60 and "fake_discount_detected" not in reasons and "no_user_savings_vs_baseline" not in reasons
@@ -134,6 +241,13 @@ def _best_baseline(input_data: DealScoringInput) -> Decimal | None:
     return None
 
 
+def _historical_average_baseline(input_data: DealScoringInput) -> Decimal | None:
+    for candidate in (input_data.aggregation.avg_30d, input_data.aggregation.avg_90d):
+        if candidate is not None and candidate > 0:
+            return candidate
+    return None
+
+
 def _history_support_adjustment(input_data: DealScoringInput) -> tuple[int, list[str]]:
     aggregation = input_data.aggregation
     if (
@@ -183,3 +297,39 @@ def _discount_support_adjustment(
     if aggregation.observation_count_90d < 15 or aggregation.observation_count_all_time < 30:
         return -10, ["limited_discount_support"]
     return 0, []
+
+
+def _normalized_text(input_data: DealScoringInput) -> str:
+    parts = [input_data.title or "", input_data.source_category or ""]
+    return " ".join(part.strip().casefold() for part in parts if part and part.strip())
+
+
+def _is_high_demand_category(normalized_text: str) -> bool:
+    return any(keyword in normalized_text for keyword in HIGH_DEMAND_KEYWORDS)
+
+
+def _has_recognized_brand(normalized_text: str) -> bool:
+    return any(keyword in normalized_text for keyword in HIGH_RECOGNITION_BRANDS)
+
+
+def _is_low_signal_commodity(normalized_text: str) -> bool:
+    return any(keyword in normalized_text for keyword in LOW_SIGNAL_COMMODITY_KEYWORDS) or any(
+        keyword in normalized_text for keyword in LOW_SIGNAL_COMMODITY_CATEGORIES
+    )
+
+
+def _is_weak_demand_signal(input_data: DealScoringInput) -> bool:
+    aggregation = input_data.aggregation
+    return aggregation.observation_count_90d < 8 or aggregation.observation_count_all_time < 20
+
+
+def _quality_category_adjustment(*, high_demand_category: bool, recognized_brand: bool) -> tuple[int, list[str]]:
+    adjustment = 0
+    reasons: list[str] = []
+    if high_demand_category:
+        adjustment += 8
+        reasons.append("high_demand_category")
+    if recognized_brand:
+        adjustment += 7
+        reasons.append("recognized_brand")
+    return adjustment, reasons

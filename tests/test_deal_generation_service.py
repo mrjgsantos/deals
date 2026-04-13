@@ -52,8 +52,9 @@ def make_record() -> ProductSourceRecord:
         product_variant_id=uuid4(),
         external_id="B0CCEXAMPLE",
         source_url="https://www.amazon.com/dp/B0CCEXAMPLE",
-        source_title="Royal Canin Mini Adult 2x8kg",
+        source_title="Logitech G435 Wireless Gaming Headset",
         source_description="Dry dog food",
+        source_category="Tech",
         currency="EUR",
         availability_status=AvailabilityStatus.IN_STOCK,
         source_attributes={"asin": "B0CCEXAMPLE"},
@@ -172,7 +173,9 @@ def test_sync_deal_creates_pending_review_deal_and_review_queue(monkeypatch) -> 
     assert deal.status.value == "pending_review"
     assert deal.previous_price is None
     assert deal.metadata_json["promotable"] is True
+    assert deal.metadata_json["publication_decision"]["reason"] == "borderline_manual_review"
     assert review.entity_type == ReviewType.DEAL_VALIDATION
+    assert review.priority == 150
     assert review.reason == "auto_generated_deal_review"
 
 
@@ -222,6 +225,31 @@ def test_sync_deal_auto_publishes_high_quality_promotable_deal(monkeypatch, capl
     assert "publication_reason=auto_publish_threshold_met" in caplog.text
 
 
+def test_sync_deal_stores_canonical_amazon_deal_url(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.deal_generation_service.aggregate_price_history_for_variant",
+        lambda db, product_variant_id, now=None: make_aggregation(),
+    )
+    monkeypatch.setattr(
+        "app.services.deal_generation_service.score_deal",
+        lambda scoring_input: make_scored_result(quality_score=60, promotable=True),
+    )
+    service = DealGenerationService()
+    db = FakeSession(scalar_results=[None, None])
+    record = make_record()
+    record.source_url = "https://www.amazon.es/Example-Product/dp/B0TEST1234/ref=sr_1_1?tag=partner-21&psc=1"
+
+    service.sync_deal_for_source_record(
+        db,
+        source=make_source(),
+        product_source_record=record,
+        price_observation=make_observation(),
+    )
+
+    deal = next(obj for obj in db.added if isinstance(obj, Deal))
+    assert deal.deal_url == "https://www.amazon.es/dp/B0TEST1234"
+
+
 def test_sync_deal_keeps_low_score_promotable_deal_in_pending_review(monkeypatch, caplog) -> None:
     aggregation = PriceAggregation(
         current_price=Decimal("59.99"),
@@ -261,10 +289,40 @@ def test_sync_deal_keeps_low_score_promotable_deal_in_pending_review(monkeypatch
     assert result.eligible is True
     assert deal.status.value == "pending_review"
     assert deal.published_at is None
-    assert deal.metadata_json["publication_decision"]["reason"] == "quality_below_auto_publish_threshold"
+    assert deal.metadata_json["publication_decision"]["reason"] == "borderline_manual_review"
+    assert deal.metadata_json["publication_decision"]["review_bucket"] == "borderline"
     assert review.status == ReviewStatus.PENDING
+    assert review.priority == 150
     assert review.reason == "auto_generated_deal_review"
     assert "review_action=created_pending_review" in caplog.text
+
+
+def test_sync_deal_does_not_auto_publish_score_below_strict_threshold(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.deal_generation_service.aggregate_price_history_for_variant",
+        lambda db, product_variant_id, now=None: make_aggregation(),
+    )
+    monkeypatch.setattr(
+        "app.services.deal_generation_service.score_deal",
+        lambda scoring_input: make_scored_result(quality_score=69, promotable=True),
+    )
+    service = DealGenerationService()
+    db = FakeSession(scalar_results=[None, None])
+
+    result = service.sync_deal_for_source_record(
+        db,
+        source=make_source(),
+        product_source_record=make_record(),
+        price_observation=make_observation(),
+    )
+
+    deal = next(obj for obj in db.added if isinstance(obj, Deal))
+    review = next(obj for obj in db.added if isinstance(obj, ReviewQueue))
+
+    assert result.eligible is True
+    assert deal.status == DealStatus.PENDING_REVIEW
+    assert deal.metadata_json["publication_decision"]["auto_publish_threshold"] == 70
+    assert review.priority == 150
 
 
 def test_sync_deal_auto_publish_resolves_existing_pending_review_item(monkeypatch, caplog) -> None:
@@ -538,6 +596,10 @@ def test_sync_deal_populates_savings_fields_with_minimally_acceptable_history(mo
         "app.services.deal_generation_service.aggregate_price_history_for_variant",
         lambda db, product_variant_id, now=None: aggregation,
     )
+    monkeypatch.setattr(
+        "app.services.deal_generation_service.score_deal",
+        lambda scoring_input: make_scored_result(quality_score=64, promotable=True),
+    )
     service = DealGenerationService()
     db = FakeSession(scalar_results=[None, None])
 
@@ -573,6 +635,10 @@ def test_sync_deal_keeps_previous_price_null_when_history_is_extremely_shallow(m
     monkeypatch.setattr(
         "app.services.deal_generation_service.aggregate_price_history_for_variant",
         lambda db, product_variant_id, now=None: aggregation,
+    )
+    monkeypatch.setattr(
+        "app.services.deal_generation_service.score_deal",
+        lambda scoring_input: make_scored_result(quality_score=64, promotable=True),
     )
     service = DealGenerationService()
     db = FakeSession(scalar_results=[None, None])

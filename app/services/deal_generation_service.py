@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.enums import DealStatus, ReviewStatus, ReviewType
 from app.db.models import Deal, PriceObservation, ProductSourceRecord, ReviewQueue, Source
+from app.ingestion.amazon_identifiers import canonicalize_amazon_product_url
 from app.pricing.aggregation import aggregate_price_history_for_variant
 from app.pricing.fake_discount import analyze_fake_discount
 from app.pricing.schemas import DealScoringInput
@@ -19,7 +20,10 @@ from app.services.tracked_product_service import ensure_tracked_product_for_sour
 MIN_PREVIOUS_PRICE_OBSERVATIONS_30D = 3
 MIN_PREVIOUS_PRICE_OBSERVATIONS_90D = 3
 MIN_PREVIOUS_PRICE_OBSERVATIONS_ALL_TIME = 4
-AUTO_PUBLISH_QUALITY_THRESHOLD = 65
+AUTO_PUBLISH_QUALITY_THRESHOLD = 70
+BORDERLINE_REVIEW_THRESHOLD = 60
+BORDERLINE_REVIEW_PRIORITY = 150
+STANDARD_REVIEW_PRIORITY = 100
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +83,8 @@ class DealGenerationService:
                 claimed_old_price=previous_price,
                 aggregation=scoring_aggregation,
                 fake_discount_analysis=fake_discount,
+                title=product_source_record.source_title,
+                source_category=product_source_record.source_category,
                 is_featured=False,
                 merchant_priority=0,
                 source_priority=0,
@@ -101,6 +107,7 @@ class DealGenerationService:
         auto_publish = self._should_auto_publish(scored)
         savings_amount = previous_price - current_price if previous_price is not None else None
         deal = self._get_existing_deal(db, product_source_record)
+        canonical_deal_url = canonicalize_amazon_product_url(product_source_record.source_url) or product_source_record.source_url
         published_at = datetime.now(timezone.utc) if auto_publish else None
         preserve_published = False
         if deal is None:
@@ -117,7 +124,7 @@ class DealGenerationService:
                 savings_amount=savings_amount,
                 savings_percent=claimed_discount_percent / Decimal("100") if claimed_discount_percent is not None else None,
                 published_at=published_at,
-                deal_url=product_source_record.source_url,
+                deal_url=canonical_deal_url,
                 summary=product_source_record.source_description,
                 metadata_json=self._deal_metadata(scored, fake_discount, aggregation, source_link_quality),
             )
@@ -136,7 +143,7 @@ class DealGenerationService:
             deal.savings_percent = claimed_discount_percent / Decimal("100") if claimed_discount_percent is not None else None
             if auto_publish and deal.published_at is None:
                 deal.published_at = published_at
-            deal.deal_url = product_source_record.source_url
+            deal.deal_url = canonical_deal_url
             deal.summary = product_source_record.source_description
             deal.metadata_json = self._deal_metadata(scored, fake_discount, aggregation, source_link_quality)
 
@@ -180,7 +187,7 @@ class DealGenerationService:
                 entity_type=ReviewType.DEAL_VALIDATION,
                 entity_id=deal.id,
                 status=ReviewStatus.PENDING,
-                priority=100,
+                priority=self._review_priority(scored),
                 reason="auto_generated_deal_review",
                 payload=self._review_payload(deal),
             )
@@ -190,6 +197,7 @@ class DealGenerationService:
         else:
             review_queue_item.product_source_record_id = product_source_record.id
             review_queue_item.status = ReviewStatus.PENDING
+            review_queue_item.priority = self._review_priority(scored)
             review_queue_item.reason = "auto_generated_deal_review"
             review_queue_item.payload = self._review_payload(deal)
             review_queue_item.resolved_at = None
@@ -211,6 +219,12 @@ class DealGenerationService:
     def _should_auto_publish(self, scored) -> bool:
         quality_score = scored.quality.score or 0
         return scored.quality.promotable and quality_score >= AUTO_PUBLISH_QUALITY_THRESHOLD
+
+    def _review_priority(self, scored) -> int:
+        quality_score = scored.quality.score or 0
+        if quality_score >= BORDERLINE_REVIEW_THRESHOLD:
+            return BORDERLINE_REVIEW_PRIORITY
+        return STANDARD_REVIEW_PRIORITY
 
     def _supported_previous_price(
         self,
@@ -321,6 +335,8 @@ class DealGenerationService:
             reason = "preserved_existing_publication"
         elif auto_publish:
             reason = "auto_publish_threshold_met"
+        elif quality_score >= BORDERLINE_REVIEW_THRESHOLD:
+            reason = "borderline_manual_review"
         else:
             reason = "quality_below_auto_publish_threshold"
         return {
@@ -328,6 +344,7 @@ class DealGenerationService:
             "auto_publish_threshold": AUTO_PUBLISH_QUALITY_THRESHOLD,
             "auto_publish": auto_publish,
             "preserve_published": preserve_published,
+            "review_bucket": "borderline" if quality_score >= BORDERLINE_REVIEW_THRESHOLD else "standard",
             "reason": reason,
         }
 

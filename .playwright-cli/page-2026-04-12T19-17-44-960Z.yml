@@ -1,0 +1,20 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - button "Deals" [ref=e5] [cursor=pointer]
+    - navigation "Public navigation" [ref=e6]:
+      - button "Latest deals" [ref=e7] [cursor=pointer]
+      - button "Saved deals" [ref=e8] [cursor=pointer]
+      - button "Login" [ref=e9] [cursor=pointer]
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]: Published deals
+        - heading "Fresh savings with real price history behind them." [level=1] [ref=e14]
+        - paragraph [ref=e15]: Browse the latest approved and published deals, with cleaner pricing context and a direct path to the merchant.
+      - region "Loading published deals" [ref=e16]:
+        - article
+        - article
+        - article
+        - article
+        - article
+        - article

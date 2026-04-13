@@ -1,5 +1,5 @@
-import type { Deal, DealScoreBreakdown, PublishedDeal } from "../types";
-import { normalizePercentValue, toSentenceCase } from "./format";
+import type { Deal, DealScoreBreakdown, PublishedDeal, UserPreferences } from "../types";
+import { formatMoney, formatPercent, normalizePercentValue, toSentenceCase } from "./format";
 
 export type SourceLinkType = "google_redirect" | "direct_merchant" | "unknown";
 
@@ -248,4 +248,104 @@ export function getSourceSearchText(deal: PublicDealLike): string {
 
 export function getPublishedDealTimestamp(deal: PublishedDeal): string {
   return deal.published_at ?? deal.detected_at;
+}
+
+export function getHistoricalPriceInsight(deal: PublishedDeal): string | null {
+  const history = deal.score_breakdown.price_history;
+  const baseline = history?.avg_30d ?? history?.avg_90d;
+  if (baseline != null) {
+    return `Usually ${formatMoney(baseline, deal.currency)}, now ${formatMoney(deal.current_price, deal.currency)}`;
+  }
+  if (deal.previous_price != null) {
+    return `Previously ${formatMoney(deal.previous_price, deal.currency)}, now ${formatMoney(deal.current_price, deal.currency)}`;
+  }
+  return null;
+}
+
+export function isGreatDeal(deal: PublishedDeal): boolean {
+  return getSavingsPercentValue(deal) > 25;
+}
+
+export function isLowestIn90Days(deal: PublishedDeal): boolean {
+  const history = deal.score_breakdown.price_history;
+  if (!history?.min_90d) {
+    return false;
+  }
+  const currentPrice = Number(deal.current_price);
+  const min90d = Number(history.min_90d);
+  if (!Number.isFinite(currentPrice) || !Number.isFinite(min90d)) {
+    return false;
+  }
+  return currentPrice <= min90d;
+}
+
+export function getPopularitySignal(deal: PublishedDeal): number {
+  const history = deal.score_breakdown.price_history;
+  if (!history) {
+    return 0;
+  }
+  const obs90d = history.observation_count_90d ?? 0;
+  const obsAllTime = history.observation_count_all_time ?? 0;
+  return Math.min(obs90d, 60) * 10 + Math.min(obsAllTime, 180);
+}
+
+export function getFeedTrustRank(deal: PublishedDeal): number {
+  const savingsPercent = Math.max(getSavingsPercentValue(deal), 0);
+  const popularity = getPopularitySignal(deal);
+  const relevance = Math.max(deal.personalization_score ?? 0, 0);
+  return savingsPercent * 1_000_000 + popularity * 1_000 + relevance;
+}
+
+export function getPriceTrustSummary(deal: PublishedDeal): {
+  currentPrice: string;
+  previousPrice: string | null;
+  savingsPercent: string | null;
+} {
+  return {
+    currentPrice: formatMoney(deal.current_price, deal.currency),
+    previousPrice: deal.previous_price ? formatMoney(deal.previous_price, deal.currency) : null,
+    savingsPercent: deal.savings_percent ? formatPercent(deal.savings_percent) : null,
+  };
+}
+
+export function getFeedPersonalizationSummary(preferences: UserPreferences): string | null {
+  if (preferences.categories.length > 0) {
+    const preview = preferences.categories.slice(0, 2).join(" and ");
+    return `Based on your interests in ${preview.toLowerCase()}`;
+  }
+  if (preferences.has_pets) {
+    return "Based on the pet-related deals in your profile";
+  }
+  if (preferences.has_kids) {
+    return "Based on the family-oriented categories in your profile";
+  }
+  if (preferences.intent.includes("save_money")) {
+    return "Based on your goal of finding stronger savings first";
+  }
+  return null;
+}
+
+export function getPersonalizationReasonLabel(
+  deal: PublishedDeal,
+  preferences: UserPreferences,
+): string | null {
+  if (deal.category && preferences.categories.includes(deal.category)) {
+    return `Because you like ${deal.category.toLowerCase()}`;
+  }
+  if (preferences.has_pets && (deal.category === "Lifestyle" || deal.subcategories.includes("pet_care"))) {
+    return "Based on your profile";
+  }
+  if (preferences.has_kids && (deal.category === "Lifestyle" || deal.subcategories.includes("baby_kids"))) {
+    return "Based on your profile";
+  }
+  if (preferences.intent.includes("save_money") && getSavingsPercentValue(deal) >= 20) {
+    return "Picked for strong savings";
+  }
+  if (preferences.budget_preference === "low") {
+    const numericPrice = Number.parseFloat(deal.current_price);
+    if (Number.isFinite(numericPrice) && numericPrice <= 50) {
+      return "Picked for your budget";
+    }
+  }
+  return null;
 }

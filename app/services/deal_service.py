@@ -7,11 +7,12 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.enums import AICopyType, DealStatus, ReviewStatus, ReviewType
-from app.db.models import AICopyDraft, Deal, ReviewQueue
+from app.db.models import AICopyDraft, Deal, ProductVariant, ReviewQueue
+from app.ingestion.amazon_identifiers import extract_amazon_asin_from_url, normalize_asin
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,11 @@ class DealRecord:
     product_source_record_id: UUID | None
     detected_at: Any
     published_at: Any | None
+    category: str | None
+    source_category: str | None
+    subcategories: list[str]
+    asin: str | None
+    personalization_score: float | None
     score_breakdown: dict[str, Any]
     ai_copy_draft: dict[str, Any] | None
 
@@ -55,6 +61,14 @@ class ReviewQueueRecord:
     deal: DealRecord
 
 
+@dataclass(slots=True)
+class PublishedDealsPage:
+    deals: list[DealRecord]
+    has_more: bool
+    next_published_at: datetime | None
+    next_id: UUID | None
+
+
 class DealQueryService:
     def list_deals(self, db: Session, *, status: DealStatus | None = None) -> list[DealRecord]:
         stmt = self._base_query()
@@ -70,8 +84,44 @@ class DealQueryService:
             return None
         return self._to_record(deal)
 
+    def list_published_deals_page(
+        self,
+        db: Session,
+        *,
+        limit: int,
+        cursor_published_at: datetime | None = None,
+        cursor_id: UUID | None = None,
+    ) -> PublishedDealsPage:
+        stmt = self._base_query().where(
+            Deal.status.in_([DealStatus.APPROVED, DealStatus.PUBLISHED]),
+            Deal.published_at.is_not(None),
+        )
+        if cursor_published_at is not None and cursor_id is not None:
+            stmt = stmt.where(
+                or_(
+                    Deal.published_at < cursor_published_at,
+                    and_(Deal.published_at == cursor_published_at, Deal.id < cursor_id),
+                )
+            )
+        rows = db.scalars(
+            stmt.order_by(Deal.published_at.desc(), Deal.id.desc()).limit(limit + 1)
+        ).all()
+        has_more = len(rows) > limit
+        page_rows = rows[:limit]
+        next_row = page_rows[-1] if has_more and page_rows else None
+        return PublishedDealsPage(
+            deals=[self._to_record(deal) for deal in page_rows],
+            has_more=has_more,
+            next_published_at=next_row.published_at if next_row is not None else None,
+            next_id=next_row.id if next_row is not None else None,
+        )
+
     def _base_query(self):
-        return select(Deal).options(selectinload(Deal.ai_copy_drafts))
+        return select(Deal).options(
+            selectinload(Deal.ai_copy_drafts),
+            selectinload(Deal.product_variant).selectinload(ProductVariant.product),
+            selectinload(Deal.product_source_record),
+        )
 
     def _to_record(self, deal: Deal) -> DealRecord:
         return DealRecord(
@@ -90,9 +140,21 @@ class DealQueryService:
             product_source_record_id=deal.product_source_record_id,
             detected_at=deal.detected_at,
             published_at=deal.published_at,
+            category=self._extract_category(deal),
+            source_category=deal.product_source_record.source_category if deal.product_source_record is not None else None,
+            subcategories=[],
+            asin=self._extract_asin(deal),
+            personalization_score=None,
             score_breakdown=self._extract_score_breakdown(deal),
             ai_copy_draft=self._extract_ai_draft(deal.ai_copy_drafts),
         )
+
+    def _extract_category(self, deal: Deal) -> str | None:
+        if deal.product_variant is not None and deal.product_variant.product is not None:
+            return deal.product_variant.product.category
+        if deal.product_source_record is not None:
+            return deal.product_source_record.source_category
+        return None
 
     def _extract_score_breakdown(self, deal: Deal) -> dict[str, Any]:
         metadata = deal.metadata_json or {}
@@ -105,6 +167,18 @@ class DealQueryService:
             "fake_discount": metadata.get("fake_discount", False),
             "price_history": metadata.get("price_aggregation"),
         }
+
+    def _extract_asin(self, deal: Deal) -> str | None:
+        if deal.product_source_record is not None:
+            source_attributes = deal.product_source_record.source_attributes or {}
+            asin = normalize_asin(source_attributes.get("asin"))
+            if asin is not None:
+                return asin
+            if deal.product_source_record.source_url:
+                return extract_amazon_asin_from_url(deal.product_source_record.source_url)
+        if deal.deal_url:
+            return extract_amazon_asin_from_url(deal.deal_url)
+        return None
 
     def _extract_ai_draft(self, drafts: list[AICopyDraft]) -> dict[str, Any] | None:
         package_drafts = [draft for draft in drafts if draft.copy_type == AICopyType.PACKAGE]

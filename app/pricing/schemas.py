@@ -47,6 +47,8 @@ class DealScoringInput:
     claimed_old_price: Decimal | None
     aggregation: PriceAggregation
     fake_discount_analysis: FakeDiscountAnalysis
+    title: str | None = None
+    source_category: str | None = None
     is_featured: bool = False
     merchant_priority: int = 0
     source_priority: int = 0

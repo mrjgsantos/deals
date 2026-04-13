@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 
 AMAZON_ASIN_PATTERN = re.compile(r"^[A-Z0-9]{10}$")
+AMAZON_HOST_PATTERN = re.compile(r"(amazon\.[a-z.]+)$", re.IGNORECASE)
 
 
 def extract_amazon_asin_from_url(url: str | None) -> str | None:
@@ -39,6 +40,20 @@ def extract_amazon_asin_from_url(url: str | None) -> str | None:
     return None
 
 
+def canonicalize_amazon_product_url(url: str | None) -> str | None:
+    """Return a clean canonical Amazon product URL when an ASIN is present."""
+
+    asin = extract_amazon_asin_from_url(url)
+    if asin is None:
+        return None
+
+    host = _canonical_amazon_host(url)
+    if host is None:
+        return None
+
+    return f"https://{host}/dp/{asin}"
+
+
 def normalize_asin(value: Any) -> str | None:
     if value is None:
         return None
@@ -48,3 +63,23 @@ def normalize_asin(value: Any) -> str | None:
     if not AMAZON_ASIN_PATTERN.fullmatch(candidate):
         return None
     return candidate
+
+
+def _canonical_amazon_host(url: str | None) -> str | None:
+    if not url:
+        return None
+
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+
+    hostname = (parsed.hostname or "").casefold()
+    if not hostname or "amazon." not in hostname:
+        return None
+
+    match = AMAZON_HOST_PATTERN.search(hostname)
+    if match is None:
+        return None
+
+    return f"www.{match.group(1).lower()}"

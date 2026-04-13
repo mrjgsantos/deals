@@ -1,0 +1,50 @@
+- generic [ref=e54]:
+  - generic [ref=e55]:
+    - generic [ref=e56]: Personalized deals
+    - heading "Help us tune your feed" [level=1] [ref=e57]
+    - paragraph [ref=e58]: Pick a few interests and we’ll rank deals around what actually matters to you instead of showing a generic stream.
+  - generic [ref=e59]:
+    - generic [ref=e60]: Categories
+    - generic [ref=e61]:
+      - button "Tech" [ref=e62] [cursor=pointer]
+      - button "Gaming" [ref=e63] [cursor=pointer]
+      - button "Home" [ref=e64] [cursor=pointer]
+      - button "Fitness" [ref=e65] [cursor=pointer]
+      - button "Audio" [ref=e66] [cursor=pointer]
+      - button "Pets" [ref=e67] [cursor=pointer]
+      - button "Kids" [ref=e68] [cursor=pointer]
+  - generic [ref=e69]:
+    - generic [ref=e70]: Budget preference
+    - generic [ref=e71]:
+      - button "Low Prefer lower-cost everyday wins" [ref=e72] [cursor=pointer]:
+        - strong [ref=e73]: Low
+        - generic [ref=e74]: Prefer lower-cost everyday wins
+      - button "Medium A balanced mix of value and upgrades" [ref=e75] [cursor=pointer]:
+        - strong [ref=e76]: Medium
+        - generic [ref=e77]: A balanced mix of value and upgrades
+      - button "High Show bigger-ticket upgrades too" [ref=e78] [cursor=pointer]:
+        - strong [ref=e79]: High
+        - generic [ref=e80]: Show bigger-ticket upgrades too
+  - generic [ref=e81]:
+    - generic [ref=e82]: Intent
+    - generic [ref=e83]:
+      - button "Save money Show sharper discounts first" [ref=e84] [cursor=pointer]:
+        - strong [ref=e85]: Save money
+        - generic [ref=e86]: Show sharper discounts first
+      - button "Discover products Surface more new things to try" [ref=e87] [cursor=pointer]:
+        - strong [ref=e88]: Discover products
+        - generic [ref=e89]: Surface more new things to try
+      - button "Upgrade life Lean into useful lifestyle improvements" [ref=e90] [cursor=pointer]:
+        - strong [ref=e91]: Upgrade life
+        - generic [ref=e92]: Lean into useful lifestyle improvements
+      - button "Practical Bias toward useful day-to-day buys" [ref=e93] [cursor=pointer]:
+        - strong [ref=e94]: Practical
+        - generic [ref=e95]: Bias toward useful day-to-day buys
+  - generic [ref=e96]:
+    - generic [ref=e97]: Life context
+    - generic [ref=e98]:
+      - button "Have pets" [ref=e99] [cursor=pointer]
+      - button "Have kids" [ref=e100] [cursor=pointer]
+  - generic [ref=e101]:
+    - button "Use default feed" [ref=e102] [cursor=pointer]
+    - button "Personalize my feed" [ref=e103] [cursor=pointer]

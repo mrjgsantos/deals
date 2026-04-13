@@ -1,15 +1,21 @@
 import type {
   AICopyDraft,
+  AuthToken,
+  AuthUser,
   Deal,
+  NewDealsResponse,
   DealPriceHistory,
   DealScoreBreakdown,
   PublishedDeal,
+  PublishedDealsPage,
   ReviewDecision,
   ReviewItem,
+  SavedDealItem,
   TrackedProductItem,
   TrackedProductsResponse,
   TrackedProductsSchedulerStatus,
   TrackedProductsSummary,
+  UserPreferences,
 } from "../types";
 
 type ApiRecord = Record<string, unknown>;
@@ -69,6 +75,28 @@ function readBooleanWithDefault(record: ApiRecord, field: string, fallback = fal
   return typeof value === "boolean" ? value : fallback;
 }
 
+function readRecordOfNumbers(record: ApiRecord, field: string): Record<string, number> {
+  const value = record[field];
+  if (!isRecord(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, item]) =>
+      typeof item === "number" && Number.isFinite(item) ? [[key, item]] : []
+    ),
+  );
+}
+
+function readRecordOfBooleans(record: ApiRecord, field: string): Record<string, boolean> {
+  const value = record[field];
+  if (!isRecord(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, item]) => (typeof item === "boolean" ? [[key, item]] : [])),
+  );
+}
+
 function readDecimalLike(record: ApiRecord, field: string): string | null {
   const value = record[field];
   if (typeof value === "string") {
@@ -122,6 +150,15 @@ export function parsePublishedDeal(value: unknown): PublishedDeal {
   return normalizePublishedDeal(value);
 }
 
+export function parsePublishedDealsPage(value: unknown): PublishedDealsPage {
+  const record = expectRecord(value, "published_deals_page");
+  return {
+    items: Array.isArray(record.items) ? record.items.map((item) => normalizePublishedDeal(item)) : [],
+    next_cursor: readOptionalString(record, "next_cursor"),
+    has_more: readBooleanWithDefault(record, "has_more"),
+  };
+}
+
 export function parsePendingReviews(value: unknown): ReviewItem[] {
   return expectArray(value, "pending_reviews").map((item) => normalizeReviewItem(item));
 }
@@ -138,6 +175,20 @@ export function parseReviewDecision(value: unknown): ReviewDecision {
   return normalizeReviewDecision(value);
 }
 
+export function parseAuthUser(value: unknown): AuthUser {
+  return normalizeAuthUser(value);
+}
+
+export function parseAuthToken(value: unknown): AuthToken {
+  const record = expectRecord(value, "auth_token");
+  return {
+    access_token: readRequiredString(record, "access_token", "auth_token"),
+    token_type: readRequiredString(record, "token_type", "auth_token"),
+    user: normalizeAuthUser(record.user),
+    is_new_user: readBooleanWithDefault(record, "is_new_user"),
+  };
+}
+
 export function parseTrackedProductsResponse(value: unknown): TrackedProductsResponse {
   const record = expectRecord(value, "tracked_products_response");
   const items = Array.isArray(record.items) ? record.items.map((item) => normalizeTrackedProductItem(item)) : [];
@@ -145,6 +196,40 @@ export function parseTrackedProductsResponse(value: unknown): TrackedProductsRes
     scheduler: normalizeTrackedProductsSchedulerStatus(record.scheduler),
     summary: normalizeTrackedProductsSummary(record.summary),
     items,
+  };
+}
+
+export function parseSavedDealItems(value: unknown): SavedDealItem[] {
+  return expectArray(value, "saved_deals").map((item) => normalizeSavedDealItem(item));
+}
+
+export function parseUserPreferences(value: unknown): UserPreferences {
+  const record = expectRecord(value, "user_preferences");
+  return {
+    categories: readStringArray(record, "categories"),
+    budget_preference: ((): "low" | "medium" | "high" | null => {
+      const value = readOptionalString(record, "budget_preference");
+      return value === "low" || value === "medium" || value === "high" ? value : null;
+    })(),
+    intent: readStringArray(record, "intent"),
+    has_pets: readBooleanWithDefault(record, "has_pets"),
+    has_kids: readBooleanWithDefault(record, "has_kids"),
+    context_flags: readRecordOfBooleans(record, "context_flags"),
+    category_affinity: readRecordOfNumbers(record, "category_affinity"),
+    saved_count_by_category: readRecordOfNumbers(record, "saved_count_by_category"),
+    clicked_count_by_category: readRecordOfNumbers(record, "clicked_count_by_category"),
+    negative_affinity: readRecordOfNumbers(record, "negative_affinity"),
+    is_profile_initialized: readBooleanWithDefault(record, "is_profile_initialized"),
+  };
+}
+
+export function parseNewDealsResponse(value: unknown): NewDealsResponse {
+  const record = expectRecord(value, "new_deals");
+  return {
+    new_count: readNumberWithDefault(record, "new_count"),
+    fallback_used: readBooleanWithDefault(record, "fallback_used"),
+    last_seen_at: readOptionalString(record, "last_seen_at"),
+    deals: Array.isArray(record.deals) ? record.deals.map((item) => normalizePublishedDeal(item)) : [],
   };
 }
 
@@ -220,6 +305,9 @@ function normalizeDeal(value: unknown): Deal {
     product_source_record_id: readOptionalString(record, "product_source_record_id"),
     detected_at: readRequiredString(record, "detected_at", "deal"),
     published_at: readOptionalString(record, "published_at"),
+    category: readOptionalString(record, "category"),
+    subcategories: readStringArray(record, "subcategories"),
+    personalization_score: readOptionalNumber(record, "personalization_score"),
     score_breakdown: normalizeScoreBreakdown(record.score_breakdown),
     ai_copy_draft: normalizeAICopyDraft(record.ai_copy_draft),
   };
@@ -239,6 +327,9 @@ function normalizePublishedDeal(value: unknown): PublishedDeal {
     summary: readOptionalString(record, "summary"),
     detected_at: readRequiredString(record, "detected_at", "published_deal"),
     published_at: readOptionalString(record, "published_at"),
+    category: readOptionalString(record, "category"),
+    subcategories: readStringArray(record, "subcategories"),
+    personalization_score: readOptionalNumber(record, "personalization_score"),
     score_breakdown: normalizeScoreBreakdown(record.score_breakdown),
     ai_copy_draft: normalizeAICopyDraft(record.ai_copy_draft),
   };
@@ -264,6 +355,25 @@ function normalizeReviewDecision(value: unknown): ReviewDecision {
     review_status: readRequiredString(record, "review_status", "review_decision"),
     deal_id: readRequiredString(record, "deal_id", "review_decision"),
     deal_status: readRequiredString(record, "deal_status", "review_decision"),
+  };
+}
+
+function normalizeAuthUser(value: unknown): AuthUser {
+  const record = expectRecord(value, "auth_user");
+  return {
+    id: readRequiredString(record, "id", "auth_user"),
+    email: readRequiredString(record, "email", "auth_user"),
+    display_name: readOptionalString(record, "display_name"),
+    avatar_url: readOptionalString(record, "avatar_url"),
+    created_at: readRequiredString(record, "created_at", "auth_user"),
+  };
+}
+
+function normalizeSavedDealItem(value: unknown): SavedDealItem {
+  const record = expectRecord(value, "saved_deal_item");
+  return {
+    saved_at: readRequiredString(record, "saved_at", "saved_deal_item"),
+    deal: normalizePublishedDeal(record.deal),
   };
 }
 

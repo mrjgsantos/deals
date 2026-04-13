@@ -71,6 +71,7 @@ def test_ingest_run_returns_200_with_serialized_success_body(monkeypatch) -> Non
         "processed": 1,
         "accepted": 1,
         "rejected": 0,
+        "skipped_due_to_dedupe": 0,
         "records": [
             {
                 "raw_ingestion_record_id": "raw-1",

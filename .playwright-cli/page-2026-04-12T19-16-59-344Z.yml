@@ -1,0 +1,115 @@
+- generic [ref=e104]:
+  - banner [ref=e105]:
+    - button "Deals" [ref=e106] [cursor=pointer]
+    - navigation "Public navigation" [ref=e107]:
+      - button "Latest deals" [ref=e108] [cursor=pointer]
+      - button "New for you" [ref=e109] [cursor=pointer]
+      - button "Saved deals" [ref=e110] [cursor=pointer]
+      - button "Logout" [ref=e111] [cursor=pointer]
+  - main [ref=e112]:
+    - generic [ref=e113]:
+      - generic [ref=e114]:
+        - generic [ref=e115]: Published deals
+        - heading "Fresh savings with real price history behind them." [level=1] [ref=e116]
+        - paragraph [ref=e117]: Browse the latest approved and published deals, with cleaner pricing context and a direct path to the merchant.
+        - generic [ref=e118]: Based on your interests in gaming and tech
+      - region "Published deals" [ref=e218]:
+        - link "History not highlighted Published 10 Apr 2026, 14:40 Save deal XIAOMI 15T Pro - Smartphone de 12+512GB, Lente óptica Leica Summilux, MediaTek Dimensity 9400+, Pantalla Eye Care de 6,83\" 144 Hz, HyperCharge de 90W, Cargador no Incluido, Negro (Versión ES) Because you like tech Save 12% €649.00 €738.98 Save €89.98 12% Usually €738.98, now €649.00 Fresh published deal with verified historical pricing support. amazon.es Seen 150 times today View details View on Amazon →" [ref=e219]:
+          - generic [ref=e220]:
+            - generic [ref=e222]: History not highlighted
+            - generic [ref=e223]:
+              - generic [ref=e224]: Published 10 Apr 2026, 14:40
+              - button "Save deal" [ref=e225] [cursor=pointer]: ♡
+          - generic [ref=e226]: XIAOMI 15T Pro - Smartphone de 12+512GB, Lente óptica Leica Summilux, MediaTek Dimensity 9400+, Pantalla Eye Care de 6,83" 144 Hz, HyperCharge de 90W, Cargador no Incluido, Negro (Versión ES)
+          - generic [ref=e227]: Because you like tech
+          - generic [ref=e228]:
+            - generic [ref=e229]: Save 12%
+            - generic [ref=e230]: €649.00
+            - generic [ref=e231]:
+              - generic [ref=e232]: €738.98
+              - generic [ref=e233]: Save €89.98
+              - generic [ref=e234]: 12%
+          - generic [ref=e235]: Usually €738.98, now €649.00
+          - paragraph [ref=e236]: Fresh published deal with verified historical pricing support.
+          - generic [ref=e237]:
+            - generic [ref=e238]:
+              - generic [ref=e239]: amazon.es
+              - generic [ref=e240]: Seen 150 times today
+            - generic [ref=e241]:
+              - button "View details" [ref=e242] [cursor=pointer]
+              - link "View on Amazon →" [ref=e243] [cursor=pointer]:
+                - /url: https://www.amazon.es/dp/B08NB7FCTC
+        - link "⚡ LIMITED History not highlighted Published 10 Apr 2026, 15:25 Save deal Echo Dot (Última generación) | Altavoz inteligente wifi y Bluetooth con Alexa, con sonido más potente y de mayor amplitud | Antracita Save 13% €50.90 €58.17 Save €7.27 13% Usually €58.17, now €50.90 Altavoz inteligente Amazon Echo Dot (5.ª generación modelo de 2022) en color blanco con diseño compacto y elegante para espacios pequeños controla tu hogar digital con la voz asistente inteligente Alexa integrado sincronización con otr... amazon.es Seen 33 times today View details View on Amazon →" [ref=e244]:
+          - generic [ref=e245]:
+            - generic [ref=e246]:
+              - generic [ref=e247]: ⚡ LIMITED
+              - generic [ref=e248]: History not highlighted
+            - generic [ref=e249]:
+              - generic [ref=e250]: Published 10 Apr 2026, 15:25
+              - button "Save deal" [ref=e251] [cursor=pointer]: ♡
+          - generic [ref=e252]: Echo Dot (Última generación) | Altavoz inteligente wifi y Bluetooth con Alexa, con sonido más potente y de mayor amplitud | Antracita
+          - generic [ref=e253]:
+            - generic [ref=e254]: Save 13%
+            - generic [ref=e255]: €50.90
+            - generic [ref=e256]:
+              - generic [ref=e257]: €58.17
+              - generic [ref=e258]: Save €7.27
+              - generic [ref=e259]: 13%
+          - generic [ref=e260]: Usually €58.17, now €50.90
+          - paragraph [ref=e261]: Altavoz inteligente Amazon Echo Dot (5.ª generación modelo de 2022) en color blanco con diseño compacto y elegante para espacios pequeños controla tu hogar digital con la voz asistente inteligente Alexa integrado sincronización con otr...
+          - generic [ref=e262]:
+            - generic [ref=e263]:
+              - generic [ref=e264]: amazon.es
+              - generic [ref=e265]: Seen 33 times today
+            - generic [ref=e266]:
+              - button "View details" [ref=e267] [cursor=pointer]
+              - link "View on Amazon →" [ref=e268] [cursor=pointer]:
+                - /url: https://www.amazon.es/dp/B09B8X9RGM
+        - link "Moderate support (38 obs / 90d) Published 10 Apr 2026, 15:25 Save deal Utopia Bedding Juego de Sabanas 4 Piezas 150x200 - Poliéster Microfibra Cepillada - Oeko-Tex Certificado - Sábana Bajera, Sábana Plana y 2 Fundas de Almohada 50x75 (Cama 150, Gris) Save 16% €13.14 €15.68 Save €2.54 16% Usually €15.68, now €13.14 Fresh published deal with verified historical pricing support. amazon.es Seen 11 times today View details View on Amazon →" [ref=e269]:
+          - generic [ref=e270]:
+            - generic [ref=e272]: Moderate support (38 obs / 90d)
+            - generic [ref=e273]:
+              - generic [ref=e274]: Published 10 Apr 2026, 15:25
+              - button "Save deal" [ref=e275] [cursor=pointer]: ♡
+          - generic [ref=e276]: Utopia Bedding Juego de Sabanas 4 Piezas 150x200 - Poliéster Microfibra Cepillada - Oeko-Tex Certificado - Sábana Bajera, Sábana Plana y 2 Fundas de Almohada 50x75 (Cama 150, Gris)
+          - generic [ref=e277]:
+            - generic [ref=e278]: Save 16%
+            - generic [ref=e279]: €13.14
+            - generic [ref=e280]:
+              - generic [ref=e281]: €15.68
+              - generic [ref=e282]: Save €2.54
+              - generic [ref=e283]: 16%
+          - generic [ref=e284]: Usually €15.68, now €13.14
+          - paragraph [ref=e285]: Fresh published deal with verified historical pricing support.
+          - generic [ref=e286]:
+            - generic [ref=e287]:
+              - generic [ref=e288]: amazon.es
+              - generic [ref=e289]: Seen 11 times today
+            - generic [ref=e290]:
+              - button "View details" [ref=e291] [cursor=pointer]
+              - link "View on Amazon →" [ref=e292] [cursor=pointer]:
+                - /url: https://www.amazon.es/dp/B075JJRFVV
+        - link "History not highlighted Published 10 Apr 2026, 14:40 Save deal JJC Funda para Tarjetas de Memoria con 36 Ranuras, Resistente al Agua, antigolpes, para 24 Tarjetas Micro SD, SDXC SDHC TF y 12 Tarjetas SD SDXC SDHC Save 9% €8.06 €8.85 Save €0.79 9% Usually €9.03, now €8.06 Fresh published deal with verified historical pricing support. amazon.es Seen 61 times today View details View on Amazon →" [ref=e293]:
+          - generic [ref=e294]:
+            - generic [ref=e296]: History not highlighted
+            - generic [ref=e297]:
+              - generic [ref=e298]: Published 10 Apr 2026, 14:40
+              - button "Save deal" [ref=e299] [cursor=pointer]: ♡
+          - generic [ref=e300]: JJC Funda para Tarjetas de Memoria con 36 Ranuras, Resistente al Agua, antigolpes, para 24 Tarjetas Micro SD, SDXC SDHC TF y 12 Tarjetas SD SDXC SDHC
+          - generic [ref=e301]:
+            - generic [ref=e302]: Save 9%
+            - generic [ref=e303]: €8.06
+            - generic [ref=e304]:
+              - generic [ref=e305]: €8.85
+              - generic [ref=e306]: Save €0.79
+              - generic [ref=e307]: 9%
+          - generic [ref=e308]: Usually €9.03, now €8.06
+          - paragraph [ref=e309]: Fresh published deal with verified historical pricing support.
+          - generic [ref=e310]:
+            - generic [ref=e311]:
+              - generic [ref=e312]: amazon.es
+              - generic [ref=e313]: Seen 61 times today
+            - generic [ref=e314]:
+              - button "View details" [ref=e315] [cursor=pointer]
+              - link "View on Amazon →" [ref=e316] [cursor=pointer]:
+                - /url: https://www.amazon.es/dp/B07SYPYH5M

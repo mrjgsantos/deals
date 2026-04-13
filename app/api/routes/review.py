@@ -5,13 +5,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_deal_query_service, get_review_service
+from app.api.dependencies import get_current_user, get_deal_query_service, get_review_service
 from app.db.session import get_db
 from app.schemas.api import ReviewDecisionResponse, ReviewQueueItemResponse
 from app.services.deal_service import DealQueryService, ReviewQueueRecord
 from app.services.review_service import ReviewService
 
-router = APIRouter(prefix="/review")
+router = APIRouter(prefix="/review", dependencies=[Depends(get_current_user)])
 
 
 @router.get("/pending", response_model=list[ReviewQueueItemResponse])

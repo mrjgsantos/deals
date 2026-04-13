@@ -64,6 +64,7 @@ class Source(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     raw_ingestion_records: Mapped[list[RawIngestionRecord]] = relationship(back_populates="source")
     price_statistics: Mapped[list[PriceStatistic]] = relationship(back_populates="source")
     deals: Mapped[list[Deal]] = relationship(back_populates="source")
+    asin_ingestion_checkpoints: Mapped[list[AsinIngestionCheckpoint]] = relationship(back_populates="source")
 
 
 class TrackedProduct(UUIDPrimaryKeyMixin, Base):
@@ -94,6 +95,65 @@ class TrackedProduct(UUIDPrimaryKeyMixin, Base):
         server_default=text("0"),
     )
     next_refresh_eligible_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AsinIngestionCheckpoint(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "asin_ingestion_checkpoints"
+    __table_args__ = (
+        UniqueConstraint("source_id", "asin", name="uq_asin_ingestion_checkpoints_source_asin"),
+        Index("ix_asin_ingestion_checkpoints_source_id_last_processed_at", "source_id", "last_processed_at"),
+    )
+
+    source_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("sources.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    asin: Mapped[str] = mapped_column(String(16), nullable=False)
+    last_processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    source: Mapped[Source] = relationship(back_populates="asin_ingestion_checkpoints")
+
+
+class User(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_users_email"),
+        UniqueConstraint("google_sub", name="uq_users_google_sub"),
+        Index("ix_users_email", "email"),
+        Index("ix_users_google_sub", "google_sub"),
+    )
+
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    google_sub: Mapped[str | None] = mapped_column(String(255))
+    display_name: Mapped[str | None] = mapped_column(String(255))
+    avatar_url: Mapped[str | None] = mapped_column(String(1000))
+    last_seen_deals_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    saved_deals: Mapped[list[SavedDeal]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    category_signals: Mapped[list[UserCategorySignal]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    events: Mapped[list[UserEvent]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    preferences: Mapped[UserPreference | None] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
 
 
 class Merchant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -465,6 +525,138 @@ class Deal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     price_observation: Mapped[PriceObservation | None] = relationship(back_populates="deals")
     source: Mapped[Source] = relationship(back_populates="deals")
     ai_copy_drafts: Mapped[list[AICopyDraft]] = relationship(back_populates="deal")
+    saved_deals: Mapped[list[SavedDeal]] = relationship(back_populates="deal", cascade="all, delete-orphan")
+
+
+class SavedDeal(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "saved_deals"
+    __table_args__ = (
+        UniqueConstraint("user_id", "deal_id", name="uq_saved_deals_user_deal"),
+        Index("ix_saved_deals_user_id_created_at", "user_id", "created_at"),
+        Index("ix_saved_deals_deal_id", "deal_id"),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    deal_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("deals.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    user: Mapped[User] = relationship(back_populates="saved_deals")
+    deal: Mapped[Deal] = relationship(back_populates="saved_deals")
+
+
+class UserPreference(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "user_preferences"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_user_preferences_user_id"),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    categories: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    budget_preference: Mapped[str | None] = mapped_column(String(16))
+    intent: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    has_pets: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    has_kids: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    context_flags: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    user: Mapped[User] = relationship(back_populates="preferences")
+
+
+class UserCategorySignal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "user_category_signals"
+    __table_args__ = (
+        UniqueConstraint("user_id", "category", name="uq_user_category_signals_user_category"),
+        Index("ix_user_category_signals_user_id_affinity_score", "user_id", "affinity_score"),
+        Index("ix_user_category_signals_user_id_updated_at", "user_id", "updated_at"),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    category: Mapped[str] = mapped_column(String(64), nullable=False)
+    affinity_score: Mapped[Decimal] = mapped_column(
+        Numeric(8, 4),
+        nullable=False,
+        default=Decimal("0"),
+        server_default=text("0"),
+    )
+    saved_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    clicked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    negative_affinity: Mapped[Decimal] = mapped_column(
+        Numeric(8, 4),
+        nullable=False,
+        default=Decimal("0"),
+        server_default=text("0"),
+    )
+    last_interacted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship(back_populates="category_signals")
+
+
+class UserEvent(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "user_events"
+    __table_args__ = (
+        Index("ix_user_events_user_id_created_at", "user_id", "created_at"),
+        Index("ix_user_events_event_type_created_at", "event_type", "created_at"),
+        Index("ix_user_events_deal_id_event_type", "deal_id", "event_type"),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    deal_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("deals.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    user: Mapped[User] = relationship(back_populates="events")
+    deal: Mapped[Deal | None] = relationship()
 
 
 class ReviewQueue(UUIDPrimaryKeyMixin, TimestampMixin, Base):

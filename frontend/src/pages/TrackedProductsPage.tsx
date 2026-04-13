@@ -4,6 +4,7 @@ import { Badge, type BadgeTone } from "../components/Badge";
 import { StatusMessage } from "../components/StatusMessage";
 import { api, getApiErrorMessage } from "../lib/api";
 import { formatDateTime, toTimestamp } from "../lib/format";
+import { toOutboundAmazonUrl } from "../lib/outboundLinks";
 import type { TrackedProductItem, TrackedProductsResponse, TrackedProductsSchedulerStatus, TrackedProductsSummary } from "../types";
 
 type TrackedSort = "attempt" | "status" | "history" | "asin" | "priority";
@@ -397,6 +398,7 @@ export function TrackedProductsPage() {
               {visibleItems.map((item) => {
                 const linkedBadges = getLinkedBadges(item);
                 const dueNow = isDueNow(item);
+                const outboundSourceUrl = toOutboundAmazonUrl(item.source_url);
 
                 return (
                   <tr key={item.id}>
@@ -410,8 +412,8 @@ export function TrackedProductsPage() {
                     <td className="table-title-cell">
                       <div className="table-title">{item.display_name ?? "No linked display name yet"}</div>
                       <div className="table-subtitle">
-                        {item.source_url ? (
-                          <a className="ops-table-link" href={item.source_url} target="_blank" rel="noreferrer">
+                        {outboundSourceUrl ? (
+                          <a className="ops-table-link" href={outboundSourceUrl} target="_blank" rel="noreferrer">
                             Open latest source record
                           </a>
                         ) : (

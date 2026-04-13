@@ -2,6 +2,7 @@
 
 from app.db.models import (
     AICopyDraft,
+    AsinIngestionCheckpoint,
     Deal,
     Merchant,
     PriceObservation,
@@ -12,10 +13,13 @@ from app.db.models import (
     RawIngestionRecord,
     ReviewQueue,
     Source,
+    UserCategorySignal,
+    UserPreference,
 )
 
 __all__ = [
     "AICopyDraft",
+    "AsinIngestionCheckpoint",
     "Deal",
     "Merchant",
     "PriceObservation",
@@ -26,4 +30,6 @@ __all__ = [
     "RawIngestionRecord",
     "ReviewQueue",
     "Source",
+    "UserCategorySignal",
+    "UserPreference",
 ]

@@ -7,6 +7,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Deals Backend"
     api_v1_prefix: str = "/api/v1"
+    auth_secret_key: str = "change-me-in-production-auth-secret"
+    auth_token_expire_minutes: int = 60 * 24 * 7
+    google_client_id: str | None = None
+    google_tokeninfo_url: str = "https://oauth2.googleapis.com/tokeninfo"
     postgres_server: str = "db"
     postgres_port: int = 5432
     postgres_user: str = "postgres"
@@ -33,6 +37,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     @computed_field

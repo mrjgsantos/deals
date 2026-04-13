@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from uuid import uuid4
 
 from app.db.enums import AvailabilityStatus, SourceType
@@ -168,6 +169,14 @@ def make_normalized_record() -> NormalizedIngestionRecord:
     )
 
 
+def make_amazon_normalized_record() -> NormalizedIngestionRecord:
+    return updated_normalized_record(
+        make_normalized_record(),
+        product_url="https://www.amazon.es/Example-Product/dp/B0TEST1234/ref=zg_bs_hi?tag=partner-21&psc=1",
+        source_attributes={"asin": "B0TEST1234"},
+    )
+
+
 def updated_normalized_record(
     normalized: NormalizedIngestionRecord,
     **updates,
@@ -266,6 +275,22 @@ class MatchAwareIngestionService(StubIngestionService):
             weight_unit=normalized.weight_unit,
             is_bundle=normalized.is_bundle,
         )
+
+
+class DedupeAwareIngestionService(StubIngestionService):
+    def __init__(self, *args, checkpoint_last_processed_at: datetime | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.checkpoint_last_processed_at = checkpoint_last_processed_at
+        self.touched_asins: list[str] = []
+
+    def _get_asin_checkpoint(self, *, db, source, asin):
+        if self.checkpoint_last_processed_at is None:
+            return None
+        return SimpleNamespace(last_processed_at=self.checkpoint_last_processed_at)
+
+    def _touch_asin_checkpoint(self, *, db, source, asin, processed_at):
+        if asin is not None:
+            self.touched_asins.append(asin)
 
 
 class KeepaHistoryAwareIngestionService(StubIngestionService):
@@ -367,6 +392,54 @@ def test_ingest_marks_rejected_records_without_aborting_batch() -> None:
     assert [record.status for record in result.records] == ["rejected", "rejected"]
 
 
+def test_ingest_skips_recent_asin_before_matching() -> None:
+    normalized = updated_normalized_record(
+        make_normalized_record(),
+        source_attributes={"gtin": "0123456789012", "asin": "B0TEST1234"},
+    )
+    service = DedupeAwareIngestionService(
+        FakeParser([make_parsed_record()]),
+        FakeNormalizer(normalized),
+        checkpoint_last_processed_at=datetime.now(timezone.utc) - timedelta(hours=2),
+        matcher=ExplodingMatcher(),
+    )
+    db = FakeSession()
+
+    result = service.ingest(db, "source-a", payload={})
+    raw_record = next(item for item in db.added if isinstance(item, RawIngestionRecord))
+
+    assert result.processed == 1
+    assert result.accepted == 0
+    assert result.rejected == 0
+    assert result.skipped_due_to_dedupe == 1
+    assert result.records[0].status == "skipped"
+    assert result.records[0].rejection_reason == "recent_asin_dedupe"
+    assert raw_record.status == "skipped"
+    assert service.touched_asins == []
+
+
+def test_ingest_reprocesses_asin_after_dedupe_window() -> None:
+    normalized = updated_normalized_record(
+        make_normalized_record(),
+        source_attributes={"gtin": "0123456789012", "asin": "B0TEST1234"},
+    )
+    matcher = StubMatcher(MatchDecision(matched=False, reason="no match"))
+    service = DedupeAwareIngestionService(
+        FakeParser([make_parsed_record()]),
+        FakeNormalizer(normalized),
+        checkpoint_last_processed_at=datetime.now(timezone.utc) - timedelta(hours=25),
+        matcher=matcher,
+    )
+    db = FakeSession()
+
+    result = service.ingest(db, "source-a", payload={})
+
+    assert result.accepted == 1
+    assert result.skipped_due_to_dedupe == 0
+    assert matcher.calls == 1
+    assert service.touched_asins == ["B0TEST1234"]
+
+
 def test_ingest_triggers_deal_generation_after_persist() -> None:
     parsed_records = [make_parsed_record()]
     parser = FakeParser(parsed_records)
@@ -383,6 +456,28 @@ def test_ingest_triggers_deal_generation_after_persist() -> None:
 
     assert result.accepted == 1
     assert len(deal_generation_service.calls) == 1
+
+
+def test_ingest_stores_canonical_amazon_source_url() -> None:
+    parser = FakeParser([make_parsed_record()])
+    normalizer = FakeNormalizer(make_amazon_normalized_record())
+    service = StubIngestionService(
+        parser,
+        normalizer,
+        deal_generation_service=RecordingDealGenerationService(),
+    )
+    db = FakeSession()
+
+    result = service.ingest(db, "source-a", payload={})
+    product_source_record = next(item for item in db.added if isinstance(item, ProductSourceRecord))
+    raw_record = next(item for item in db.added if isinstance(item, RawIngestionRecord))
+
+    assert result.accepted == 1
+    assert product_source_record.source_url == "https://www.amazon.es/dp/B0TEST1234"
+    assert product_source_record.raw_payload["product_url"] == "https://www.amazon.es/dp/B0TEST1234"
+    assert raw_record.normalized_payload["product_url"] == (
+        "https://www.amazon.es/Example-Product/dp/B0TEST1234/ref=zg_bs_hi?tag=partner-21&psc=1"
+    )
 
 
 def test_ingest_uses_exact_match_and_skips_hybrid_when_exact_succeeds() -> None:

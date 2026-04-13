@@ -30,7 +30,7 @@ def test_bulk_script_maps_raw_keepa_products_into_ingestable_payload(monkeypatch
 
     def fake_ingest_keepa_payload(payload, api_base_url):
         ingested_payloads.append(payload)
-        return {"accepted": 1, "rejected": 0}
+        return {"accepted": 1, "rejected": 0, "skipped_due_to_dedupe": 0}
 
     monkeypatch.setattr(ingest_keepa_bulk, "ensure_source", lambda domain_id: None)
     monkeypatch.setattr(
@@ -52,12 +52,16 @@ def test_bulk_script_maps_raw_keepa_products_into_ingestable_payload(monkeypatch
 
     assert exit_code == 0
     assert '"event": "asin_input_curation"' in captured.out
+    assert '"event": "keepa_batch_plan"' in captured.out
+    assert '"batch_size": 20' in captured.out
+    assert '"total_batches": 1' in captured.out
     assert '"event": "keepa_batch_preflight"' in captured.out
     assert '"total_fetched_products": 1' in captured.out
     assert '"total_posted_products": 1' in captured.out
     assert '"total_skipped_products": 0' in captured.out
     assert '"total_accepted": 1' in captured.out
     assert '"total_rejected": 0' in captured.out
+    assert '"skipped_due_to_dedupe": 0' in captured.out
     assert '"valid_and_enrichable": 1' in captured.out
     assert product["domainId"] == 9
     assert product["currency"] == "EUR"
@@ -100,7 +104,7 @@ def test_bulk_script_skips_sparse_keepa_products_before_ingest(monkeypatch, caps
 
     def fake_ingest_keepa_payload(payload, api_base_url):
         ingested_payloads.append(payload)
-        return {"accepted": 1, "rejected": 0}
+        return {"accepted": 1, "rejected": 0, "skipped_due_to_dedupe": 0}
 
     monkeypatch.setattr(ingest_keepa_bulk, "ensure_source", lambda domain_id: None)
     monkeypatch.setattr(
@@ -129,6 +133,8 @@ def test_bulk_script_skips_sparse_keepa_products_before_ingest(monkeypatch, caps
     assert len(posted_products) == 1
     assert posted_products[0]["asin"] == "B09G9FPGTN"
     assert '"event": "keepa_batch_preflight"' in captured.out
+    assert '"batch_size": 2' in captured.out
+    assert '"total_batches": 1' in captured.out
     assert '"requested_asin": "B08N5WRWNW"' in captured.out
     assert '"outcome": "valid_but_incomplete"' in captured.out
     assert '"reason": "missing_title"' in captured.out
@@ -179,7 +185,7 @@ def test_bulk_script_reports_input_curation_issues(monkeypatch, tmp_path: Path, 
 
     def fake_ingest_keepa_payload(payload, api_base_url):
         ingested_payloads.append(payload)
-        return {"accepted": 2, "rejected": 0}
+        return {"accepted": 2, "rejected": 0, "skipped_due_to_dedupe": 0}
 
     monkeypatch.setattr(ingest_keepa_bulk, "ensure_source", lambda domain_id: None)
     monkeypatch.setattr(
@@ -204,6 +210,64 @@ def test_bulk_script_reports_input_curation_issues(monkeypatch, tmp_path: Path, 
     assert '"reason": "duplicate_asin"' in captured.out
     assert '"reason": "invalid_asin_or_amazon_url"' in captured.out
     assert '"accepted_asin_count": 2' in captured.out
+
+
+def test_chunked_rebalances_small_tail_batches() -> None:
+    values = [f"B0TEST{i:04d}" for i in range(25)]
+
+    batches = ingest_keepa_bulk.chunked(values, 20)
+
+    assert len(batches) == 2
+    assert [len(batch) for batch in batches] == [13, 12]
+
+
+def test_bulk_script_reports_batch_stats_for_multiple_batches(monkeypatch, capsys) -> None:
+    fetch_calls: list[list[str]] = []
+
+    async def fake_fetch_batch(asins, *, domain_id):
+        fetch_calls.append(list(asins))
+        return {
+            "products": [
+                {
+                    "asin": asin,
+                    "domainId": 9,
+                    "title": f"Product {asin}",
+                    "csv": [
+                        [],
+                        [7999800, 6999, 7999920, 4999],
+                    ],
+                }
+                for asin in asins
+            ]
+        }
+
+    def fake_ingest_keepa_payload(payload, api_base_url):
+        return {"accepted": len(payload["products"]), "rejected": 0, "skipped_due_to_dedupe": 0}
+
+    asins = [f"B0TEST{i:04d}" for i in range(25)]
+
+    monkeypatch.setattr(ingest_keepa_bulk, "ensure_source", lambda domain_id: None)
+    monkeypatch.setattr(
+        ingest_keepa_bulk,
+        "parse_args",
+        lambda: type(
+            "Args",
+            (),
+            {"asins": asins, "asin_file": None, "api_base_url": "http://app:8000", "domain_id": 9},
+        )(),
+    )
+    monkeypatch.setattr(ingest_keepa_bulk, "fetch_batch", fake_fetch_batch)
+    monkeypatch.setattr(ingest_keepa_bulk, "ingest_keepa_payload", fake_ingest_keepa_payload)
+
+    exit_code = ingest_keepa_bulk.main()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert [len(batch) for batch in fetch_calls] == [13, 12]
+    assert '"event": "keepa_batch_plan"' in captured.out
+    assert '"batch_size": 20' in captured.out
+    assert '"total_batches": 2' in captured.out
+    assert '"batch_sizes": [13, 12]' in captured.out
 
 
 def test_load_asins_prefers_cli_then_file_then_defaults(tmp_path: Path) -> None:

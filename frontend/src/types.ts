@@ -46,6 +46,9 @@ export type Deal = {
   product_source_record_id: string | null;
   detected_at: string;
   published_at: string | null;
+  category: string | null;
+  subcategories: string[];
+  personalization_score: number | null;
   score_breakdown: DealScoreBreakdown;
   ai_copy_draft: AICopyDraft | null;
 };
@@ -62,8 +65,17 @@ export type PublishedDeal = {
   summary: string | null;
   detected_at: string;
   published_at: string | null;
+  category: string | null;
+  subcategories: string[];
+  personalization_score: number | null;
   score_breakdown: DealScoreBreakdown;
   ai_copy_draft: AICopyDraft | null;
+};
+
+export type PublishedDealsPage = {
+  items: PublishedDeal[];
+  next_cursor: string | null;
+  has_more: boolean;
 };
 
 export type ReviewItem = {
@@ -81,6 +93,47 @@ export type ReviewDecision = {
   review_status: string;
   deal_id: string;
   deal_status: string;
+};
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  created_at: string;
+};
+
+export type AuthToken = {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+  is_new_user: boolean;
+};
+
+export type SavedDealItem = {
+  saved_at: string;
+  deal: PublishedDeal;
+};
+
+export type NewDealsResponse = {
+  new_count: number;
+  fallback_used: boolean;
+  last_seen_at: string | null;
+  deals: PublishedDeal[];
+};
+
+export type UserPreferences = {
+  categories: string[];
+  budget_preference: "low" | "medium" | "high" | null;
+  intent: string[];
+  has_pets: boolean;
+  has_kids: boolean;
+  context_flags: Record<string, boolean>;
+  category_affinity: Record<string, number>;
+  saved_count_by_category: Record<string, number>;
+  clicked_count_by_category: Record<string, number>;
+  negative_affinity: Record<string, number>;
+  is_profile_initialized: boolean;
 };
 
 export type TrackedProductsSchedulerStatus = {

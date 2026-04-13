@@ -13,6 +13,7 @@ import {
   isLowConfidenceDeal,
 } from "../lib/dealSignals";
 import { formatDateTime, formatMoney, formatPercent, toSentenceCase } from "../lib/format";
+import { toOutboundAmazonUrl } from "../lib/outboundLinks";
 import type { PublishedDeal } from "../types";
 
 function getErrorMessage(error: unknown): string {
@@ -24,9 +25,17 @@ function getErrorMessage(error: unknown): string {
 export function PublicDealDetailPage({
   dealId,
   navigate,
+  isSaved,
+  isSavePending,
+  onToggleSave,
+  onOutboundClick,
 }: {
   dealId: string;
   navigate: (path: string) => void;
+  isSaved: boolean;
+  isSavePending: boolean;
+  onToggleSave: (deal: PublishedDeal) => void;
+  onOutboundClick: (deal: PublishedDeal) => void;
 }) {
   const [deal, setDeal] = useState<PublishedDeal | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,6 +86,7 @@ export function PublicDealDetailPage({
   const sourceLabel = getSourceLabel(deal.deal_url);
   const lowConfidence = isLowConfidenceDeal(deal);
   const priceHistory = deal.score_breakdown.price_history;
+  const outboundDealUrl = toOutboundAmazonUrl(deal.deal_url);
 
   return (
     <div className="public-shell">
@@ -101,11 +111,25 @@ export function PublicDealDetailPage({
           </p>
 
           <div className="public-detail-actions">
-            {deal.deal_url ? (
-              <a className="public-cta public-cta-large" href={deal.deal_url} target="_blank" rel="noreferrer">
+            {outboundDealUrl ? (
+              <a
+                className="public-cta public-cta-large"
+                href={outboundDealUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => onOutboundClick(deal)}
+              >
                 Open deal
               </a>
             ) : null}
+            <button
+              type="button"
+              className={isSaved ? "secondary-button save-detail-button save-detail-button-active" : "secondary-button save-detail-button"}
+              disabled={isSavePending}
+              onClick={() => onToggleSave(deal)}
+            >
+              {isSaved ? "♥ Saved" : "♡ Save"}
+            </button>
             {sourceLabel ? <span className="public-meta-text">{sourceLabel}</span> : null}
           </div>
         </section>

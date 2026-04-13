@@ -1,0 +1,26 @@
+- generic [ref=e18]:
+  - generic [ref=e19]:
+    - generic [ref=e20]: Deals
+    - heading "Save your favorite deals" [level=1] [ref=e21]
+    - paragraph [ref=e22]: Sign in to keep a private list of deals you want to revisit. Or continue with Google.
+  - tablist "Authentication mode" [ref=e23]:
+    - button "Login" [ref=e24] [cursor=pointer]
+    - button "Register" [active] [ref=e25] [cursor=pointer]
+  - generic [ref=e26]:
+    - generic [ref=e28]:
+      - button "Continuar com a Google. Abre num novo separador" [ref=e30] [cursor=pointer]:
+        - generic [ref=e32]:
+          - img [ref=e34]
+          - generic [ref=e41]: Continuar com a Google
+      - iframe
+    - generic [ref=e43]: or use email
+  - generic [ref=e44]:
+    - generic [ref=e45]:
+      - generic [ref=e46]: Email
+      - textbox "Email" [ref=e47]:
+        - /placeholder: you@example.com
+    - generic [ref=e48]:
+      - generic [ref=e49]: Password
+      - textbox "Password" [ref=e50]:
+        - /placeholder: At least 8 characters
+    - button "Create account" [ref=e52] [cursor=pointer]

@@ -86,6 +86,8 @@ def main() -> int:
                                 claimed_old_price=deal.previous_price,
                                 aggregation=aggregation,
                                 fake_discount_analysis=fake_discount,
+                                title=deal.title,
+                                source_category=deal.category,
                                 is_featured=deal.is_featured,
                                 merchant_priority=0,
                                 source_priority=0,

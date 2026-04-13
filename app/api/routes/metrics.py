@@ -3,15 +3,27 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_metrics_service, get_tracked_product_operations_service
+from app.api.dependencies import (
+    get_current_user,
+    get_metrics_service,
+    get_product_analytics_service,
+    get_tracked_product_operations_service,
+)
 from app.core.config import settings
 from app.db.session import get_db
 from app.jobs.background_keepa_scheduler import BACKGROUND_KEEPA_INTERVAL_SECONDS
-from app.schemas.api import MetricsOverviewResponse, TrackedProductsResponse, TrackedProductsSchedulerStatusResponse
+from app.schemas.api import (
+    MetricsOverviewResponse,
+    ProductAnalyticsDealPerformanceResponse,
+    ProductAnalyticsOverviewResponse,
+    TrackedProductsResponse,
+    TrackedProductsSchedulerStatusResponse,
+)
 from app.services.metrics_service import MetricsService
+from app.services.product_analytics_service import ProductAnalyticsService
 from app.services.tracked_product_service import TrackedProductOperationsService
 
-router = APIRouter(prefix="/metrics")
+router = APIRouter(prefix="/metrics", dependencies=[Depends(get_current_user)])
 
 
 @router.get("/overview", response_model=MetricsOverviewResponse)
@@ -41,6 +53,47 @@ def get_tracked_products(
         scheduler=scheduler,
         summary=summary,
         items=tracked_products,
+    )
+
+
+@router.get("/product-analytics", response_model=ProductAnalyticsOverviewResponse)
+def get_product_analytics(
+    days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    service: ProductAnalyticsService = Depends(get_product_analytics_service),
+) -> ProductAnalyticsOverviewResponse:
+    overview = service.get_overview(db, days=days, limit=limit)
+    return ProductAnalyticsOverviewResponse(
+        days=overview.days,
+        user_signups=overview.user_signups,
+        onboarding_completed=overview.onboarding_completed,
+        deal_impressions=overview.deal_impressions,
+        deal_clicks=overview.deal_clicks,
+        deal_saves=overview.deal_saves,
+        deal_unsaves=overview.deal_unsaves,
+        recommended_deal_impressions=overview.recommended_deal_impressions,
+        recommended_deal_clicks=overview.recommended_deal_clicks,
+        ctr=overview.ctr,
+        save_rate=overview.save_rate,
+        recommendation_ctr=overview.recommendation_ctr,
+        top_deals=[
+            ProductAnalyticsDealPerformanceResponse(
+                deal_id=item.deal_id,
+                title=item.title,
+                category=item.category,
+                impression_count=item.impression_count,
+                click_count=item.click_count,
+                save_count=item.save_count,
+                unsave_count=item.unsave_count,
+                recommended_impression_count=item.recommended_impression_count,
+                recommended_click_count=item.recommended_click_count,
+                ctr=item.ctr,
+                save_rate=item.save_rate,
+                recommended_ctr=item.recommended_ctr,
+            )
+            for item in overview.top_deals
+        ],
     )
 
 

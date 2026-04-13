@@ -110,4 +110,5 @@ class IngestionBatchResult(BaseModel):
     processed: int = 0
     accepted: int = 0
     rejected: int = 0
+    skipped_due_to_dedupe: int = 0
     records: list[IngestionRecordResult] = Field(default_factory=list)

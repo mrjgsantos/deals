@@ -1,12 +1,17 @@
 import type { PublishedDeal } from "../types";
-import { formatDateTime, formatMoney, formatPercent } from "../lib/format";
+import { formatDateTime } from "../lib/format";
+import { toOutboundAmazonUrl } from "../lib/outboundLinks";
 import {
   getFreshnessSummary,
+  getHistoricalPriceInsight,
   getHistoryStrengthTone,
   getHistorySupportSummary,
+  getPriceTrustSummary,
   getPublishedDealTimestamp,
   getSavingsPercentValue,
   getSourceLabel,
+  isGreatDeal,
+  isLowestIn90Days,
 } from "../lib/dealSignals";
 import { Badge } from "./Badge";
 
@@ -20,9 +25,19 @@ function getSeenTodayCount(dealId: string): number {
 
 export function PublicDealCard({
   deal,
+  isSaved,
+  isSavePending,
+  personalizationLabel,
+  onToggleSave,
+  onOutboundClick = () => {},
   onViewDetails,
 }: {
   deal: PublishedDeal;
+  isSaved: boolean;
+  isSavePending: boolean;
+  personalizationLabel?: string | null;
+  onToggleSave: () => void;
+  onOutboundClick?: () => void;
   onViewDetails: (dealId: string) => void;
 }) {
   const publishedAt = getPublishedDealTimestamp(deal);
@@ -34,6 +49,11 @@ export function PublicDealCard({
   const isLimited = freshnessSummary === "Fresh price drop";
   const isLowData = historySupport === "Shallow history" || historySupport === "Limited history";
   const seenTodayCount = getSeenTodayCount(deal.id);
+  const historicalInsight = getHistoricalPriceInsight(deal);
+  const isGoodDeal = isGreatDeal(deal);
+  const isLowestInHistory = isLowestIn90Days(deal);
+  const priceTrustSummary = getPriceTrustSummary(deal);
+  const outboundDealUrl = toOutboundAmazonUrl(deal.deal_url);
 
   return (
     <article
@@ -50,24 +70,50 @@ export function PublicDealCard({
     >
       <div className="public-card-topline">
         <div className="badge-cluster badge-cluster-wrap">
-          {savingsPercent > 25 ? <Badge value="🔥 DEAL" tone="success" /> : null}
+          {isGoodDeal ? <Badge value="🔥 Great Deal" tone="success" /> : null}
+          {isLowestInHistory ? <Badge value="📉 Lowest in 90 days" tone="success" /> : null}
           {isLimited ? <Badge value="⚡ LIMITED" tone="warning" /> : null}
           {isLowData ? <Badge value="⚠️ LOW DATA" tone="warning" /> : null}
           <Badge value={historySupport} tone={historyTone} />
         </div>
-        <span className="public-meta-text">Published {formatDateTime(publishedAt)}</span>
+        <div className="public-card-topline-actions">
+          <span className="public-meta-text">Published {formatDateTime(publishedAt)}</span>
+          <button
+            type="button"
+            className={isSaved ? "save-button save-button-active" : "save-button"}
+            aria-label={isSaved ? "Unsave deal" : "Save deal"}
+            aria-pressed={isSaved}
+            disabled={isSavePending}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleSave();
+            }}
+          >
+            {isSaved ? "♥" : "♡"}
+          </button>
+        </div>
       </div>
 
       <div className="public-card-title">{deal.title}</div>
+      {personalizationLabel ? <div className="public-card-why">{personalizationLabel}</div> : null}
 
       <div className="public-price-block">
-        <div className="public-price-primary">{formatMoney(deal.current_price, deal.currency)}</div>
+        {savingsPercent >= 0 ? (
+          <div className={isGoodDeal ? "public-savings-badge public-savings-badge-strong" : "public-savings-badge"}>
+            Save {priceTrustSummary.savingsPercent}
+          </div>
+        ) : null}
+        <div className="public-price-primary">{priceTrustSummary.currentPrice}</div>
         <div className="public-price-secondary">
-          <span className="public-price-previous">{formatMoney(deal.previous_price, deal.currency)}</span>
-          <span>Save {formatMoney(deal.savings_amount, deal.currency)}</span>
-          <span>{formatPercent(deal.savings_percent)}</span>
+          {priceTrustSummary.previousPrice ? (
+            <span className="public-price-previous">Was {priceTrustSummary.previousPrice}</span>
+          ) : null}
+          <span>Now {priceTrustSummary.currentPrice}</span>
+          {priceTrustSummary.savingsPercent ? <span>Save {priceTrustSummary.savingsPercent}</span> : null}
         </div>
       </div>
+
+      {historicalInsight ? <div className="public-history-insight">{historicalInsight}</div> : null}
 
       <p className="public-card-summary">{deal.summary ?? "Fresh published deal with verified historical pricing support."}</p>
 
@@ -87,13 +133,16 @@ export function PublicDealCard({
           >
             View details
           </button>
-          {deal.deal_url ? (
+          {outboundDealUrl ? (
             <a
               className="public-cta"
-              href={deal.deal_url}
+              href={outboundDealUrl}
               target="_blank"
               rel="noreferrer"
-              onClick={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                onOutboundClick();
+              }}
             >
               View on Amazon →
             </a>

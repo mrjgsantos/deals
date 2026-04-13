@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db.enums import AvailabilityStatus
 from app.db.models import (
+    AsinIngestionCheckpoint,
     Merchant,
     PriceObservation,
     Product,
@@ -20,6 +21,7 @@ from app.db.models import (
     RawIngestionRecord,
     Source,
 )
+from app.ingestion.amazon_identifiers import canonicalize_amazon_product_url, normalize_asin
 from app.ingestion.exceptions import PayloadValidationError, RecordRejectedError, SourceNotFoundError
 from app.ingestion.interfaces import RecordNormalizer, SourceParser
 from app.ingestion.schemas import IngestionBatchResult, IngestionRecordResult, NormalizedIngestionRecord
@@ -37,6 +39,7 @@ from app.services.deal_generation_service import DealGenerationService
 
 logger = logging.getLogger(__name__)
 MAX_KEEPA_HISTORY_POINTS = 90
+ASIN_DEDUPE_WINDOW = timedelta(hours=24)
 
 
 class IngestionService:
@@ -81,14 +84,28 @@ class IngestionService:
             try:
                 with db.begin_nested():
                     normalized = self.normalizer.normalize(parsed_record)
-                    write_result = self._persist_normalized_record(
+                    dedupe_asin = self._normalized_asin(normalized)
+                    if self._should_skip_recent_asin(
                         db=db,
                         source=source,
-                        raw_record=raw_record,
-                        normalized=normalized,
-                        keepa_run_state=keepa_run_state,
-                    )
-                result.accepted += 1
+                        asin=dedupe_asin,
+                    ):
+                        write_result = self._mark_dedupe_skipped(
+                            raw_record=raw_record,
+                            normalized=normalized,
+                            asin=dedupe_asin,
+                        )
+                        result.skipped_due_to_dedupe += 1
+                    else:
+                        write_result = self._persist_normalized_record(
+                            db=db,
+                            source=source,
+                            raw_record=raw_record,
+                            normalized=normalized,
+                            keepa_run_state=keepa_run_state,
+                            dedupe_asin=dedupe_asin,
+                        )
+                        result.accepted += 1
                 result.records.append(write_result)
             except RecordRejectedError as exc:
                 raw_record.status = "rejected"
@@ -127,12 +144,13 @@ class IngestionService:
         if commit:
             db.commit()
         logger.info(
-            "ingestion_batch_complete source=%s parser=%s processed=%s accepted=%s rejected=%s",
+            "ingestion_batch_complete source=%s parser=%s processed=%s accepted=%s rejected=%s skipped_due_to_dedupe=%s",
             source.slug,
             self.parser.parser_name,
             result.processed,
             result.accepted,
             result.rejected,
+            result.skipped_due_to_dedupe,
         )
         return result
 
@@ -143,6 +161,7 @@ class IngestionService:
         raw_record: RawIngestionRecord,
         normalized: NormalizedIngestionRecord,
         keepa_run_state: KeepaFetchRunState | None = None,
+        dedupe_asin: str | None = None,
     ) -> IngestionRecordResult:
         match_decision = self.matcher.match_normalized_record(db, normalized)
         merchant = self._get_or_create_merchant(db, normalized)
@@ -160,7 +179,10 @@ class IngestionService:
         product_source_record.merchant = merchant
         product_source_record.product = product
         product_source_record.product_variant = product_variant
-        product_source_record.source_url = str(normalized.product_url)
+        normalized_product_url = str(normalized.product_url)
+        canonical_product_url = canonicalize_amazon_product_url(normalized_product_url) or normalized_product_url
+
+        product_source_record.source_url = canonical_product_url
         product_source_record.image_url = normalized.image_url
         product_source_record.source_title = normalized.source_title
         product_source_record.source_brand = normalized.source_brand
@@ -170,7 +192,7 @@ class IngestionService:
         product_source_record.availability_status = normalized.availability_status
         product_source_record.source_attributes = normalized.source_attributes
         product_source_record.raw_payload = {
-            "product_url": str(normalized.product_url),
+            "product_url": canonical_product_url,
             "image_url": normalized.image_url,
             "external_id": normalized.external_id,
         }
@@ -204,6 +226,12 @@ class IngestionService:
         raw_record.product_source_record = product_source_record
         raw_record.normalized_payload = normalized.model_dump(mode="json")
         raw_record.processed_at = datetime.now(timezone.utc)
+        self._touch_asin_checkpoint(
+            db=db,
+            source=source,
+            asin=dedupe_asin,
+            processed_at=raw_record.processed_at,
+        )
         self._sync_review_candidate(
             db=db,
             source=source,
@@ -232,6 +260,83 @@ class IngestionService:
             price_observation_id=str(price_observation.id),
             status="duplicate" if duplicate_observation else "accepted",
         )
+
+    def _should_skip_recent_asin(
+        self,
+        *,
+        db: Session,
+        source: Source,
+        asin: str | None,
+        now: datetime | None = None,
+    ) -> bool:
+        if asin is None:
+            return False
+        checkpoint = self._get_asin_checkpoint(db=db, source=source, asin=asin)
+        if checkpoint is None:
+            return False
+        reference_time = now or datetime.now(timezone.utc)
+        return checkpoint.last_processed_at >= (reference_time - ASIN_DEDUPE_WINDOW)
+
+    def _mark_dedupe_skipped(
+        self,
+        *,
+        raw_record: RawIngestionRecord,
+        normalized: NormalizedIngestionRecord,
+        asin: str | None,
+    ) -> IngestionRecordResult:
+        raw_record.status = "skipped"
+        raw_record.rejection_reason = "recent_asin_dedupe"
+        raw_record.normalized_payload = normalized.model_dump(mode="json")
+        raw_record.processed_at = datetime.now(timezone.utc)
+        logger.info(
+            "ingestion_record_skipped_recent_asin_dedupe external_id=%s asin=%s raw_ingestion_record_id=%s",
+            normalized.external_id,
+            asin,
+            raw_record.id,
+        )
+        return IngestionRecordResult(
+            raw_ingestion_record_id=str(raw_record.id),
+            status="skipped",
+            rejection_reason="recent_asin_dedupe",
+        )
+
+    def _get_asin_checkpoint(
+        self,
+        *,
+        db: Session,
+        source: Source,
+        asin: str,
+    ) -> AsinIngestionCheckpoint | None:
+        return db.scalar(
+            select(AsinIngestionCheckpoint).where(
+                AsinIngestionCheckpoint.source_id == source.id,
+                AsinIngestionCheckpoint.asin == asin,
+            )
+        )
+
+    def _touch_asin_checkpoint(
+        self,
+        *,
+        db: Session,
+        source: Source,
+        asin: str | None,
+        processed_at: datetime,
+    ) -> None:
+        if asin is None:
+            return
+        checkpoint = self._get_asin_checkpoint(db=db, source=source, asin=asin)
+        if checkpoint is None:
+            checkpoint = AsinIngestionCheckpoint(
+                source_id=source.id,
+                asin=asin,
+                last_processed_at=processed_at,
+            )
+            db.add(checkpoint)
+            return
+        checkpoint.last_processed_at = processed_at
+
+    def _normalized_asin(self, normalized: NormalizedIngestionRecord) -> str | None:
+        return normalize_asin((normalized.source_attributes or {}).get("asin"))
 
     def _get_source(self, db: Session, source_slug: str) -> Source:
         source = db.scalar(select(Source).where(Source.slug == source_slug))

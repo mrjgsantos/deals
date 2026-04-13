@@ -1,5 +1,6 @@
 import type { Deal } from "../types";
 import { formatDateTime, formatMoney, formatPercent } from "../lib/format";
+import { toOutboundAmazonUrl } from "../lib/outboundLinks";
 import { Badge } from "./Badge";
 import { ScoreBreakdown } from "./ScoreBreakdown";
 import {
@@ -28,6 +29,7 @@ export function DealSummary({
   const historySupportSummary = getHistorySupportSummary(deal);
   const historyStrengthTone = getHistoryStrengthTone(deal);
   const historyValueSummary = getHistoricalValueSummary(deal);
+  const outboundDealUrl = toOutboundAmazonUrl(deal.deal_url);
 
   return (
     <div className={compact ? "deal-summary deal-summary-compact" : "deal-summary"}>
@@ -101,8 +103,8 @@ export function DealSummary({
               <div className="detail-block-title">Summary</div>
               <p className="summary-copy">{deal.summary ?? "No summary provided."}</p>
               <div className="external-link-row">
-                {deal.deal_url ? (
-                  <a href={deal.deal_url} target="_blank" rel="noreferrer">
+                {outboundDealUrl ? (
+                  <a href={outboundDealUrl} target="_blank" rel="noreferrer">
                     Open source deal
                   </a>
                 ) : (
