@@ -19,7 +19,7 @@ Flow
    path used by the background Keepa scheduler and daily_ingestion.py.
 
 Newly created ProductSourceRecords are then scored and (if eligible)
-auto-published by the next run of the hourly pipeline.  The background
+auto-published by the next run of the hourly pipeline. The background
 Keepa scheduler continues enriching them over the following days.
 """
 from __future__ import annotations
@@ -28,6 +28,8 @@ import asyncio
 import logging
 import time
 from pathlib import Path
+
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.ingestion.normalization import DefaultRecordNormalizer
@@ -41,18 +43,28 @@ from app.integrations.amazon_es_discovery import (
     fetch_amazon_es_page,
     filter_candidate_pool,
 )
-from app.integrations.keepa_client import KeepaClientError, KeepaConfigurationError, fetch_products_by_asins
+from app.integrations.keepa_client import (
+    KeepaClientError,
+    KeepaConfigurationError,
+    fetch_products_by_asins,
+)
 from app.integrations.keepa_curation import preflight_keepa_batch_for_bulk_ingest
 from app.jobs.common import job_session, run_job
 from app.matching.service import MatchingService
 from scripts.ingest_keepa_bulk import SOURCE_SLUG, chunked, ensure_source
 
 # Smaller than MAX_BATCH_SIZE to bound per-request payload size (~5–10 MB vs 10–20 MB)
-DISCOVERY_KEEPA_BATCH_SIZE = 10
+DISCOVERY_KEEPA_BATCH_SIZE = 1
+
 # Per-socket-operation timeout passed to httpx (connect/read chunk)
 KEEPA_FETCH_TIMEOUT = 60.0
+
 # Hard wall-clock timeout wrapping the entire coroutine — catches slow large responses
 KEEPA_FETCH_HARD_TIMEOUT = 120.0
+
+# Defensive DB timeout for a single ingestion subtransaction.
+# If a query/flush hangs, we want a clear Postgres error instead of a silent stall.
+INGEST_STATEMENT_TIMEOUT_MS = 30_000
 
 
 def main() -> int:
@@ -67,7 +79,10 @@ def main() -> int:
 
         source_urls = _load_urls(urls_file)
         if not source_urls:
-            logger.info("amazon_discovery_skipped reason=no_urls_configured path=%s", urls_file)
+            logger.info(
+                "amazon_discovery_skipped reason=no_urls_configured path=%s",
+                urls_file,
+            )
             return 0
 
         logger.info("amazon_discovery_starting url_count=%s", len(source_urls))
@@ -194,9 +209,10 @@ def _run_discovery(
     return filtered.accepted_candidates, {"pages_fetched": len(pages), "raw_count": raw_count}
 
 
-def _merge_page_candidates(pages: list[AmazonEsCandidatePoolPage]) -> list[AmazonEsCandidate]:
-    """Deduplicate by ASIN across pages, keeping the richest title and first
-    observed price."""
+def _merge_page_candidates(
+    pages: list[AmazonEsCandidatePoolPage],
+) -> list[AmazonEsCandidate]:
+    """Deduplicate by ASIN across pages, keeping the richest title and first observed price."""
     by_asin: dict[str, AmazonEsCandidate] = {}
     order: list[str] = []
 
@@ -215,7 +231,9 @@ def _merge_page_candidates(pages: list[AmazonEsCandidatePoolPage]) -> list[Amazo
                 )
                 order.append(cand.asin)
             else:
-                if cand.title and (existing.title is None or len(cand.title) > len(existing.title)):
+                if cand.title and (
+                    existing.title is None or len(cand.title) > len(existing.title)
+                ):
                     existing.title = cand.title
                 if existing.price_eur is None and cand.price_eur is not None:
                     existing.price_eur = cand.price_eur
@@ -232,8 +250,9 @@ def _run_keepa_ingest(
     """Fetch Keepa data for `asins` in batches and ingest directly into the DB.
 
     Returns (total_accepted, total_rejected).
-    KeepaConfigurationError (missing API key) propagates — it should not be
-    silenced.  Per-batch KeepaClientErrors are logged and skipped.
+
+    KeepaConfigurationError (missing API key) propagates — it should not be silenced.
+    Per-batch KeepaClientErrors are logged and skipped.
     """
     ensure_source(domain_id)
 
@@ -257,35 +276,40 @@ def _run_keepa_ingest(
     )
 
     with job_session() as db:
-        for batch_num, batch in enumerate(chunked(asins, DISCOVERY_KEEPA_BATCH_SIZE), start=1):
+        for batch_num, batch in enumerate(
+            chunked(asins, DISCOVERY_KEEPA_BATCH_SIZE), start=1
+        ):
+            batch_label = f"{batch_num}/{total_batches}"
+
             try:
                 logger.info(
-                    "amazon_discovery_keepa_fetch_start batch=%s/%s asins=%s",
-                    batch_num,
-                    total_batches,
+                    "amazon_discovery_keepa_fetch_start batch=%s asins=%s",
+                    batch_label,
                     batch,
                 )
                 fetch_start = time.monotonic()
                 raw_payload = asyncio.run(
                     asyncio.wait_for(
-                        fetch_products_by_asins(batch, domain_id=domain_id, timeout=KEEPA_FETCH_TIMEOUT),
+                        fetch_products_by_asins(
+                            batch,
+                            domain_id=domain_id,
+                            timeout=KEEPA_FETCH_TIMEOUT,
+                        ),
                         timeout=KEEPA_FETCH_HARD_TIMEOUT,
                     )
                 )
                 fetch_elapsed = time.monotonic() - fetch_start
                 products_returned = len((raw_payload or {}).get("products") or [])
                 logger.info(
-                    "amazon_discovery_keepa_fetch_done batch=%s/%s elapsed_s=%.1f products_returned=%s",
-                    batch_num,
-                    total_batches,
+                    "amazon_discovery_keepa_fetch_done batch=%s elapsed_s=%.1f products_returned=%s",
+                    batch_label,
                     fetch_elapsed,
                     products_returned,
                 )
 
                 logger.info(
-                    "amazon_discovery_preflight_start batch=%s/%s",
-                    batch_num,
-                    total_batches,
+                    "amazon_discovery_preflight_start batch=%s",
+                    batch_label,
                 )
                 preflight_start = time.monotonic()
                 preflight = preflight_keepa_batch_for_bulk_ingest(
@@ -294,65 +318,64 @@ def _run_keepa_ingest(
                     domain_id=domain_id,
                 )
                 logger.info(
-                    "amazon_discovery_preflight_done batch=%s/%s elapsed_s=%.1f outcomes=%s accepted_products=%s",
-                    batch_num,
-                    total_batches,
+                    "amazon_discovery_preflight_done batch=%s elapsed_s=%.1f outcomes=%s accepted_products=%s",
+                    batch_label,
                     time.monotonic() - preflight_start,
                     preflight.counts_by_outcome,
                     len((preflight.payload or {}).get("products") or []),
                 )
 
-                if not preflight.payload.get("products"):
+                products = (preflight.payload or {}).get("products") or []
+                if not products:
                     logger.info(
-                        "amazon_discovery_batch_empty batch=%s/%s",
-                        batch_num,
-                        total_batches,
+                        "amazon_discovery_batch_empty batch=%s",
+                        batch_label,
                     )
                     continue
 
                 logger.info(
-                    "amazon_discovery_ingest_start batch=%s/%s product_count=%s",
-                    batch_num,
-                    total_batches,
-                    len(preflight.payload["products"]),
+                    "amazon_discovery_ingest_start batch=%s product_count=%s",
+                    batch_label,
+                    len(products),
                 )
-                ingest_start = time.monotonic()
-                with db.begin_nested():
-                    result = service.ingest(db, source_slug=SOURCE_SLUG, payload=preflight.payload)
+
+                result = _ingest_batch_with_observability(
+                    db=db,
+                    service=service,
+                    payload=preflight.payload,
+                    source_slug=SOURCE_SLUG,
+                    logger=logger,
+                    batch_label=batch_label,
+                )
 
                 total_accepted += result.accepted
                 total_rejected += result.rejected
                 logger.info(
-                    "amazon_discovery_batch_ingested batch=%s/%s elapsed_s=%.1f accepted=%s rejected=%s",
-                    batch_num,
-                    total_batches,
-                    time.monotonic() - ingest_start,
+                    "amazon_discovery_batch_ingested batch=%s accepted=%s rejected=%s",
+                    batch_label,
                     result.accepted,
                     result.rejected,
                 )
 
             except asyncio.TimeoutError:
                 logger.error(
-                    "amazon_discovery_keepa_timeout batch=%s/%s hard_timeout_s=%s asins=%s skipping_batch",
-                    batch_num,
-                    total_batches,
+                    "amazon_discovery_keepa_timeout batch=%s hard_timeout_s=%s asins=%s skipping_batch",
+                    batch_label,
                     KEEPA_FETCH_HARD_TIMEOUT,
                     batch,
                 )
             except KeepaConfigurationError:
-                raise  # Missing API key — surface immediately, abort job
+                raise
             except KeepaClientError:
                 logger.exception(
-                    "amazon_discovery_keepa_error batch=%s/%s asins=%s skipping_batch",
-                    batch_num,
-                    total_batches,
+                    "amazon_discovery_keepa_error batch=%s asins=%s skipping_batch",
+                    batch_label,
                     batch,
                 )
             except Exception:
                 logger.exception(
-                    "amazon_discovery_batch_error batch=%s/%s asins=%s skipping_batch",
-                    batch_num,
-                    total_batches,
+                    "amazon_discovery_batch_error batch=%s asins=%s skipping_batch",
+                    batch_label,
                     batch,
                 )
 
@@ -364,6 +387,82 @@ def _run_keepa_ingest(
         time.monotonic() - job_start,
     )
     return total_accepted, total_rejected
+
+
+def _ingest_batch_with_observability(
+    *,
+    db,
+    service: IngestionService,
+    payload: dict,
+    source_slug: str,
+    logger: logging.Logger,
+    batch_label: str,
+):
+    """Wrap the ingestion boundary with clear transaction/DB timing logs.
+
+    This does not replace deeper logs inside IngestionService. It isolates whether the
+    stall is before entering the subtransaction, inside service.ingest(), or while
+    releasing/flushing the nested transaction.
+    """
+    products = (payload or {}).get("products") or []
+    ingest_start = time.monotonic()
+
+    logger.info(
+        "amazon_discovery_txn_begin_start batch=%s product_count=%s",
+        batch_label,
+        len(products),
+    )
+
+    with db.begin_nested():
+        logger.info(
+            "amazon_discovery_txn_begin_done batch=%s",
+            batch_label,
+        )
+
+        logger.info(
+            "amazon_discovery_stmt_timeout_set_start batch=%s timeout_ms=%s",
+            batch_label,
+            INGEST_STATEMENT_TIMEOUT_MS,
+        )
+        db.execute(text("SET LOCAL statement_timeout = :timeout_ms"), {"timeout_ms": INGEST_STATEMENT_TIMEOUT_MS})
+        logger.info(
+            "amazon_discovery_stmt_timeout_set_done batch=%s",
+            batch_label,
+        )
+
+        logger.info(
+            "amazon_discovery_service_ingest_call_start batch=%s source_slug=%s",
+            batch_label,
+            source_slug,
+        )
+        service_call_start = time.monotonic()
+        result = service.ingest(db, source_slug=source_slug, payload=payload)
+        logger.info(
+            "amazon_discovery_service_ingest_call_done batch=%s elapsed_s=%.2f accepted=%s rejected=%s",
+            batch_label,
+            time.monotonic() - service_call_start,
+            getattr(result, "accepted", None),
+            getattr(result, "rejected", None),
+        )
+
+        logger.info(
+            "amazon_discovery_explicit_flush_start batch=%s",
+            batch_label,
+        )
+        flush_start = time.monotonic()
+        db.flush()
+        logger.info(
+            "amazon_discovery_explicit_flush_done batch=%s elapsed_s=%.2f",
+            batch_label,
+            time.monotonic() - flush_start,
+        )
+
+    logger.info(
+        "amazon_discovery_txn_closed batch=%s total_elapsed_s=%.2f",
+        batch_label,
+        time.monotonic() - ingest_start,
+    )
+    return result
 
 
 if __name__ == "__main__":
