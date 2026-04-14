@@ -228,7 +228,7 @@ function QueueSkeleton() {
 // ─── Detail Drawer ────────────────────────────────────────────────────────────
 
 function DetailDrawer({
-  reviewId,
+  reviewId: _reviewId,
   deal,
   isLoading,
   isBusy,
@@ -357,7 +357,7 @@ export function PendingReviewsPage() {
     amazon: allItems.filter((i) => Boolean(i.asin)).length,
   }), [allItems]);
 
-  async function handleDecision(reviewId: string, dealId: string, action: "approve" | "reject") {
+  async function handleDecision(reviewId: string, _dealId: string, action: "approve" | "reject") {
     setActionState({ reviewId, action });
     setFeedback(null);
     try {
