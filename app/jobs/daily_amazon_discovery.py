@@ -420,21 +420,18 @@ def _ingest_batch_with_observability(
         )
 
         logger.info(
-            "amazon_discovery_stmt_timeout_set_start batch=%s timeout_ms=%s",
-            batch_label,
-            INGEST_STATEMENT_TIMEOUT_MS,
-        )
-        db.execute(text("SET LOCAL statement_timeout = :timeout_ms"), {"timeout_ms": INGEST_STATEMENT_TIMEOUT_MS})
-        logger.info(
-            "amazon_discovery_stmt_timeout_set_done batch=%s",
-            batch_label,
-        )
-
-        logger.info(
-            "amazon_discovery_service_ingest_call_start batch=%s source_slug=%s",
-            batch_label,
-            source_slug,
-        )
+    "amazon_discovery_stmt_timeout_set_start batch=%s timeout_ms=%s",
+    batch_label,
+    INGEST_STATEMENT_TIMEOUT_MS,
+)
+db.execute(
+    text("SELECT set_config('statement_timeout', :timeout_value, true)"),
+    {"timeout_value": f"{INGEST_STATEMENT_TIMEOUT_MS}ms"},
+)
+logger.info(
+    "amazon_discovery_stmt_timeout_set_done batch=%s",
+    batch_label,
+)
         service_call_start = time.monotonic()
         result = service.ingest(db, source_slug=source_slug, payload=payload)
         logger.info(
