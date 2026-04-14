@@ -3415,3 +3415,66 @@
 2026-04-14 11:44:30,261 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
 2026-04-14 11:44:31,795 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
 2026-04-14 11:44:31,796 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 11:54:32,252 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 11:54:32,261 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 12:04:32,743 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 12:04:32,750 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 12:14:33,257 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 12:14:33,267 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 12:24:33,725 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 12:24:33,734 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 12:34:34,202 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 12:34:34,224 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 12:44:34,692 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 12:44:34,704 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 12:54:35,187 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 12:54:35,194 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:02:06,705 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 13:02:08,043 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 13:02:09,673 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 13:02:09,674 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:02:22,317 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 13:02:23,046 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 13:02:24,577 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 13:02:24,579 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:02:27,610 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 13:02:28,356 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 13:02:29,813 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 13:02:29,814 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:02:32,700 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 13:02:33,456 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 13:02:34,948 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 13:02:34,950 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:02:36,561 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 13:02:37,355 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 13:02:38,872 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 13:02:38,874 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:02:50,307 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 13:02:51,036 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 13:02:52,572 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 13:02:52,574 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:02:56,842 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 13:02:57,595 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 13:02:59,105 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 13:02:59,108 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:03:01,729 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 13:03:02,449 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 13:03:03,901 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 13:03:03,902 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:03:05,246 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 13:03:06,090 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 13:03:07,558 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 13:03:07,559 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:03:08,985 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 13:03:09,732 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 13:03:11,235 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 13:03:11,236 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:03:13,256 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 13:03:13,994 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 13:03:15,430 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 13:03:15,432 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:03:55,690 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 13:03:56,583 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 13:03:58,110 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 13:03:58,113 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 13:04:10,992 INFO jobs.background_keepa_scheduler background_keepa_scheduler_disabled enable_background_jobs=false
