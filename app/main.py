@@ -1,3 +1,16 @@
+from app.core.config import settings
+
+print(
+    "DB DEBUG",
+    {
+        "postgres_server": settings.postgres_server,
+        "postgres_port": settings.postgres_port,
+        "postgres_user": settings.postgres_user,
+        "postgres_db": settings.postgres_db,
+        "database_url": settings.database_url.replace(settings.postgres_password, "***"),
+    },
+)
+
 from contextlib import asynccontextmanager
 import logging
 
