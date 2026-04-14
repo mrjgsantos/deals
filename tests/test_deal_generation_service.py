@@ -503,7 +503,7 @@ def test_sync_deal_does_not_duplicate_tracked_asin(monkeypatch) -> None:
     assert not any(isinstance(obj, TrackedProduct) for obj in db.added)
 
 
-def test_sync_deal_skips_non_promotable_records(monkeypatch, caplog) -> None:
+def test_sync_deal_creates_pending_review_for_non_promotable_records(monkeypatch, caplog) -> None:
     aggregation = PriceAggregation(
         current_price=Decimal("105.00"),
         avg_30d=Decimal("95.00"),
@@ -521,8 +521,12 @@ def test_sync_deal_skips_non_promotable_records(monkeypatch, caplog) -> None:
         "app.services.deal_generation_service.aggregate_price_history_for_variant",
         lambda db, product_variant_id, now=None: aggregation,
     )
+    monkeypatch.setattr(
+        "app.services.deal_generation_service.score_deal",
+        lambda scoring_input: make_scored_result(quality_score=0, promotable=False),
+    )
     service = DealGenerationService()
-    db = FakeSession()
+    db = FakeSession(scalar_results=[None, None, None])
     caplog.set_level("INFO", logger="app.services.deal_generation_service")
     observation = make_observation()
     observation.sale_price = Decimal("105.00")
@@ -536,10 +540,17 @@ def test_sync_deal_skips_non_promotable_records(monkeypatch, caplog) -> None:
         price_observation=observation,
     )
 
-    assert result.eligible is False
-    assert not any(isinstance(obj, Deal) for obj in db.added)
-    assert "deal_generation_skipped" in caplog.text
-    assert "reason=not_promotable" in caplog.text
+    deal = next(obj for obj in db.added if isinstance(obj, Deal))
+    review = next(obj for obj in db.added if isinstance(obj, ReviewQueue))
+
+    assert result.eligible is True
+    assert deal.status == DealStatus.PENDING_REVIEW
+    assert deal.published_at is None
+    assert deal.metadata_json["promotable"] is False
+    assert review.status == ReviewStatus.PENDING
+    assert "deal_generation_not_promotable" in caplog.text
+    assert "reason=creating_pending_review_deal" in caplog.text
+    assert "deal_generation_decision" in caplog.text
 
 
 def test_sync_deal_uses_supported_historical_baseline_for_previous_price(monkeypatch) -> None:

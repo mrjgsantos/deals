@@ -1,0 +1,2 @@
+2026-04-14 07:40:13,255 INFO jobs.daily_stats_recompute stats_recompute_complete pairs=32 updated=32 failed=0
+2026-04-14 07:40:29,442 INFO jobs.daily_stats_recompute stats_recompute_complete pairs=32 updated=32 failed=0

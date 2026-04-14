@@ -2,3 +2,11 @@
 2026-04-09 12:54:07,836 INFO jobs.daily_ingestion serpapi_query_complete query=air fryer fetched=40 mapped=5 accepted=5 rejected=0
 2026-04-09 12:54:09,256 INFO jobs.daily_ingestion serpapi_query_complete query=robot vacuum fetched=40 mapped=5 accepted=5 rejected=0
 2026-04-09 12:54:09,257 INFO jobs.daily_ingestion serpapi_batch_complete total_queries=3 successful_queries=3 failed_queries=0 total_fetched=120 total_mapped=15 total_accepted=15 total_rejected=0
+2026-04-14 07:40:55,982 INFO jobs.daily_ingestion serpapi_query_complete query=wireless earbuds fetched=40 mapped=5 accepted=5 rejected=0
+2026-04-14 07:41:05,285 INFO jobs.daily_ingestion serpapi_query_complete query=air fryer fetched=40 mapped=5 accepted=5 rejected=0
+2026-04-14 07:41:14,781 INFO jobs.daily_ingestion serpapi_query_complete query=robot vacuum fetched=40 mapped=5 accepted=5 rejected=0
+2026-04-14 07:41:14,783 INFO jobs.daily_ingestion serpapi_batch_complete total_queries=3 successful_queries=3 failed_queries=0 total_fetched=120 total_mapped=15 total_accepted=15 total_rejected=0
+2026-04-14 07:46:25,168 INFO jobs.daily_ingestion serpapi_query_complete query=wireless earbuds fetched=40 mapped=5 accepted=5 rejected=0
+2026-04-14 07:46:31,781 INFO jobs.daily_ingestion serpapi_query_complete query=air fryer fetched=40 mapped=5 accepted=5 rejected=0
+2026-04-14 07:46:38,340 INFO jobs.daily_ingestion serpapi_query_complete query=robot vacuum fetched=40 mapped=5 accepted=5 rejected=0
+2026-04-14 07:46:38,342 INFO jobs.daily_ingestion serpapi_batch_complete total_queries=3 successful_queries=3 failed_queries=0 total_fetched=120 total_mapped=15 total_accepted=15 total_rejected=0

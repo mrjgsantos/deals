@@ -95,14 +95,13 @@ class DealGenerationService:
 
         if not scored.quality.promotable:
             logger.info(
-                "deal_generation_skipped source=%s product_source_record_id=%s product_variant_id=%s reason=not_promotable quality_score=%s quality_reasons=%s",
+                "deal_generation_not_promotable source=%s product_source_record_id=%s product_variant_id=%s quality_score=%s quality_reasons=%s reason=creating_pending_review_deal",
                 source.slug,
                 product_source_record.id,
                 product_source_record.product_variant_id,
                 scored.quality.score,
                 scored.quality.reasons,
             )
-            return DealGenerationResult(deal=None, review_queue_item=None, eligible=False)
 
         auto_publish = self._should_auto_publish(scored)
         savings_amount = previous_price - current_price if previous_price is not None else None
