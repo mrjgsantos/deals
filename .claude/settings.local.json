@@ -6,7 +6,8 @@
       "Bash(grep -rn '`/api/v1' /Users/jorgesantos/Documents/GitHub/Deals/frontend/src/ --include=\"*.ts\" --include=\"*.tsx\")",
       "Bash(docker compose run:*)",
       "Bash(grep -E \"\\\\.\\(py|tsx|ts\\)$\")",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
