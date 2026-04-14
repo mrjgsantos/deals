@@ -28,6 +28,13 @@ import {
   parseUserPreferences,
 } from "./apiContracts";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "";
+
+function buildApiUrl(path: string): string {
+  if (/^https?:\/\//.test(path)) return path;
+  return `${API_BASE_URL}${path}`;
+}
+
 const AUTH_TOKEN_KEY = "deals.auth.token";
 const AUTH_USER_KEY = "deals.auth.user";
 const AUTH_EXPIRED_EVENT = "deals:auth-expired";
@@ -116,7 +123,7 @@ function dispatchAuthExpired(): void {
 }
 
 async function fetchJson(path: string, init?: RequestInit, token?: string | null): Promise<{ response: Response; body: unknown }> {
-  const response = await fetch(path, {
+  const response = await fetch(buildApiUrl(path), {
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
