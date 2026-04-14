@@ -3411,3 +3411,7 @@
 2026-04-14 11:37:23,656 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
 2026-04-14 11:37:26,218 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
 2026-04-14 11:37:26,219 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 11:44:29,269 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 11:44:30,261 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 11:44:31,795 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=0 eligible_asins=0
+2026-04-14 11:44:31,796 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=0 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0

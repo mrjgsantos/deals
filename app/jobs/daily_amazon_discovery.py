@@ -53,17 +53,9 @@ from app.jobs.common import job_session, run_job
 from app.matching.service import MatchingService
 from scripts.ingest_keepa_bulk import SOURCE_SLUG, chunked, ensure_source
 
-# Smaller than MAX_BATCH_SIZE to bound per-request payload size (~5–10 MB vs 10–20 MB)
 DISCOVERY_KEEPA_BATCH_SIZE = 1
-
-# Per-socket-operation timeout passed to httpx (connect/read chunk)
 KEEPA_FETCH_TIMEOUT = 60.0
-
-# Hard wall-clock timeout wrapping the entire coroutine — catches slow large responses
 KEEPA_FETCH_HARD_TIMEOUT = 120.0
-
-# Defensive DB timeout for a single ingestion subtransaction.
-# If a query/flush hangs, we want a clear Postgres error instead of a silent stall.
 INGEST_STATEMENT_TIMEOUT_MS = 30_000
 
 
@@ -87,7 +79,6 @@ def main() -> int:
 
         logger.info("amazon_discovery_starting url_count=%s", len(source_urls))
 
-        # ── Phase 1: discover ASINs ──────────────────────────────────────────
         candidates, page_stats = _run_discovery(
             source_urls,
             logger,
@@ -104,7 +95,6 @@ def main() -> int:
         if not candidates:
             return 0
 
-        # ── Phase 2: Keepa ingest ────────────────────────────────────────────
         accepted, rejected = _run_keepa_ingest(
             [c.asin for c in candidates],
             domain_id=settings.amazon_discovery_domain_id,
@@ -119,9 +109,6 @@ def main() -> int:
         return 0
 
     return run_job("daily_amazon_discovery", _runner)
-
-
-# ── helpers ──────────────────────────────────────────────────────────────────
 
 
 def _load_urls(path: Path) -> list[str]:
@@ -140,11 +127,6 @@ def _run_discovery(
     *,
     max_candidates: int,
 ) -> tuple[list[AmazonEsCandidate], dict[str, int]]:
-    """Fetch each URL, merge candidates, filter, and assess quality.
-
-    Returns the accepted candidate list and basic page stats.
-    Returns an empty list (not an error) if quality is too low to ingest.
-    """
     pages: list[AmazonEsCandidatePoolPage] = []
     raw_count = 0
 
@@ -212,7 +194,6 @@ def _run_discovery(
 def _merge_page_candidates(
     pages: list[AmazonEsCandidatePoolPage],
 ) -> list[AmazonEsCandidate]:
-    """Deduplicate by ASIN across pages, keeping the richest title and first observed price."""
     by_asin: dict[str, AmazonEsCandidate] = {}
     order: list[str] = []
 
@@ -247,13 +228,6 @@ def _run_keepa_ingest(
     domain_id: int,
     logger: logging.Logger,
 ) -> tuple[int, int]:
-    """Fetch Keepa data for `asins` in batches and ingest directly into the DB.
-
-    Returns (total_accepted, total_rejected).
-
-    KeepaConfigurationError (missing API key) propagates — it should not be silenced.
-    Per-batch KeepaClientErrors are logged and skipped.
-    """
     ensure_source(domain_id)
 
     parser = KeepaParser()
@@ -265,7 +239,7 @@ def _run_keepa_ingest(
 
     total_accepted = 0
     total_rejected = 0
-    total_batches = -(-len(asins) // DISCOVERY_KEEPA_BATCH_SIZE)  # ceiling division
+    total_batches = -(-len(asins) // DISCOVERY_KEEPA_BATCH_SIZE)
     job_start = time.monotonic()
 
     logger.info(
@@ -398,12 +372,6 @@ def _ingest_batch_with_observability(
     logger: logging.Logger,
     batch_label: str,
 ):
-    """Wrap the ingestion boundary with clear transaction/DB timing logs.
-
-    This does not replace deeper logs inside IngestionService. It isolates whether the
-    stall is before entering the subtransaction, inside service.ingest(), or while
-    releasing/flushing the nested transaction.
-    """
     products = (payload or {}).get("products") or []
     ingest_start = time.monotonic()
 
@@ -420,18 +388,24 @@ def _ingest_batch_with_observability(
         )
 
         logger.info(
-    "amazon_discovery_stmt_timeout_set_start batch=%s timeout_ms=%s",
-    batch_label,
-    INGEST_STATEMENT_TIMEOUT_MS,
-)
-db.execute(
-    text("SELECT set_config('statement_timeout', :timeout_value, true)"),
-    {"timeout_value": f"{INGEST_STATEMENT_TIMEOUT_MS}ms"},
-)
-logger.info(
-    "amazon_discovery_stmt_timeout_set_done batch=%s",
-    batch_label,
-)
+            "amazon_discovery_stmt_timeout_set_start batch=%s timeout_ms=%s",
+            batch_label,
+            INGEST_STATEMENT_TIMEOUT_MS,
+        )
+        db.execute(
+            text("SELECT set_config('statement_timeout', :timeout_value, true)"),
+            {"timeout_value": f"{INGEST_STATEMENT_TIMEOUT_MS}ms"},
+        )
+        logger.info(
+            "amazon_discovery_stmt_timeout_set_done batch=%s",
+            batch_label,
+        )
+
+        logger.info(
+            "amazon_discovery_service_ingest_call_start batch=%s source_slug=%s",
+            batch_label,
+            source_slug,
+        )
         service_call_start = time.monotonic()
         result = service.ingest(db, source_slug=source_slug, payload=payload)
         logger.info(
