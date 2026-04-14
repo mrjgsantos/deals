@@ -3370,3 +3370,12 @@
 2026-04-14 10:08:08,296 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
 2026-04-14 10:08:16,290 INFO jobs.background_keepa_scheduler background_keepa_scheduler_disabled enable_background_jobs=false
 2026-04-14 10:18:08,668 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:28:09,106 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:38:09,463 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:42:03,584 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 10:42:05,045 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 10:42:06,552 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:42:46,612 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 10:42:47,561 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 10:42:48,908 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:43:04,659 INFO jobs.background_keepa_scheduler background_keepa_scheduler_disabled enable_background_jobs=false

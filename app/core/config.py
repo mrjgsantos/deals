@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     keepa_api_key: str | None = None
     keepa_domain_id: int = 1
 
+    amazon_discovery_urls_file: str = "data/amazon_es_discovery_urls.txt"
+    amazon_discovery_max_candidates: int = 60
+    amazon_discovery_domain_id: int = 9  # 9 = amazon.es
+
     enable_background_jobs: bool = False
 
     model_config = SettingsConfigDict(

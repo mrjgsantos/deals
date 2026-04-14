@@ -1,0 +1,18 @@
+# Amazon.es category pages used for daily ASIN discovery.
+# One URL per line. Lines starting with # are ignored.
+#
+# Fetched once per day by app/jobs/daily_amazon_discovery.py.
+# Accepted ASINs are enriched via Keepa and ingested as amazon-keepa source records.
+# Add or remove URLs here without any code changes.
+
+# Electronics best sellers — primary signal source
+https://www.amazon.es/gp/bestsellers/electronics/
+
+# Computing best sellers
+https://www.amazon.es/gp/bestsellers/computers/
+
+# Mobile phones & accessories
+https://www.amazon.es/gp/bestsellers/ce-de-ec/
+
+# Movers and shakers (fast-rising products)
+https://www.amazon.es/gp/movers-and-shakers/electronics/
