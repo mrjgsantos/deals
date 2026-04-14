@@ -38,6 +38,7 @@ class DealRecord:
     source_category: str | None
     subcategories: list[str]
     asin: str | None
+    image_url: str | None
     personalization_score: float | None
     score_breakdown: dict[str, Any]
     ai_copy_draft: dict[str, Any] | None
@@ -218,6 +219,7 @@ class DealQueryService:
             source_category=deal.product_source_record.source_category if deal.product_source_record is not None else None,
             subcategories=[],
             asin=self._extract_asin(deal),
+            image_url=deal.product_source_record.image_url if deal.product_source_record is not None else None,
             personalization_score=None,
             score_breakdown=self._extract_score_breakdown(deal),
             ai_copy_draft=self._extract_ai_draft(deal.ai_copy_drafts),

@@ -402,6 +402,7 @@ function normalizePublishedDeal(value: unknown): PublishedDeal {
     savings_percent: readDecimalLike(record, "savings_percent"),
     deal_url: readOptionalString(record, "deal_url"),
     summary: readOptionalString(record, "summary"),
+    image_url: readOptionalString(record, "image_url"),
     detected_at: readRequiredString(record, "detected_at", "published_deal"),
     published_at: readOptionalString(record, "published_at"),
     category: readOptionalString(record, "category"),

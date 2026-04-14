@@ -63,6 +63,7 @@ export type PublishedDeal = {
   savings_percent: string | null;
   deal_url: string | null;
   summary: string | null;
+  image_url: string | null;
   detected_at: string;
   published_at: string | null;
   category: string | null;

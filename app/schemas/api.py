@@ -247,6 +247,7 @@ class PublishedDealResponse(BaseModel):
     savings_percent: Decimal | None = None
     deal_url: str | None = None
     summary: str | None = None
+    image_url: str | None = None
     detected_at: datetime
     published_at: datetime | None = None
     category: str | None = None

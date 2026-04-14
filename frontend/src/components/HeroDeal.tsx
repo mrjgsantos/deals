@@ -6,51 +6,51 @@ import {
   getPriceTrustSummary,
   isLowestIn90Days,
 } from "../lib/dealSignals";
-import { PriceSparkline } from "./PriceSparkline";
 
-type CategoryKey =
-  | "Electronics"
-  | "Tech"
-  | "Home"
-  | "Sports"
-  | "Beauty"
-  | "Health"
-  | "Kitchen"
-  | "Fashion"
-  | "Books"
-  | "Toys"
-  | "Garden"
-  | "Office"
-  | "Lifestyle"
-  | "Food"
-  | "Pets"
-  | "Travel";
-
-const CATEGORY_GRADIENTS: Record<CategoryKey, string> = {
-  Electronics: "linear-gradient(150deg, rgba(37,99,235,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Tech: "linear-gradient(150deg, rgba(37,99,235,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Home: "linear-gradient(150deg, rgba(194,65,12,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Sports: "linear-gradient(150deg, rgba(21,128,61,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Beauty: "linear-gradient(150deg, rgba(157,23,77,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Health: "linear-gradient(150deg, rgba(15,118,110,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Kitchen: "linear-gradient(150deg, rgba(180,83,9,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Fashion: "linear-gradient(150deg, rgba(109,40,217,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Books: "linear-gradient(150deg, rgba(67,56,202,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Toys: "linear-gradient(150deg, rgba(161,98,7,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Garden: "linear-gradient(150deg, rgba(20,83,45,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Office: "linear-gradient(150deg, rgba(51,65,85,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Lifestyle: "linear-gradient(150deg, rgba(112,26,117,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Food: "linear-gradient(150deg, rgba(146,64,14,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Pets: "linear-gradient(150deg, rgba(63,98,18,0.22) 0%, rgba(14,12,10,0.96) 70%)",
-  Travel: "linear-gradient(150deg, rgba(7,89,133,0.22) 0%, rgba(14,12,10,0.96) 70%)",
+const CATEGORY_EMOJI: Record<string, string> = {
+  Electronics: "⚡",
+  Tech: "💻",
+  Home: "🏠",
+  Sports: "🏃",
+  Beauty: "✨",
+  Health: "💊",
+  Kitchen: "🍳",
+  Fashion: "👗",
+  Books: "📚",
+  Toys: "🎮",
+  Garden: "🌱",
+  Office: "📋",
+  Lifestyle: "🌟",
+  Food: "🛒",
+  Automotive: "🚗",
+  Baby: "🍼",
+  Pets: "🐾",
+  Travel: "✈️",
 };
 
-const DEFAULT_GRADIENT =
-  "linear-gradient(150deg, rgba(63,63,70,0.25) 0%, rgba(14,12,10,0.96) 70%)";
+const CATEGORY_BG: Record<string, string> = {
+  Electronics: "#E8F0FE",
+  Tech: "#E8F0FE",
+  Home: "#FFF3E0",
+  Sports: "#E8F5E9",
+  Beauty: "#FCE4EC",
+  Health: "#E0F7FA",
+  Kitchen: "#FFF8E1",
+  Fashion: "#F3E5F5",
+  Books: "#EDE7F6",
+  Toys: "#FFFDE7",
+  Garden: "#F1F8E9",
+  Lifestyle: "#FDE7F9",
+};
 
-function getCategoryGradient(category: string | null): string {
-  if (!category) return DEFAULT_GRADIENT;
-  return CATEGORY_GRADIENTS[category as CategoryKey] ?? DEFAULT_GRADIENT;
+function getPlaceholderEmoji(category: string | null): string {
+  if (!category) return "🏷";
+  return CATEGORY_EMOJI[category] ?? "🏷";
+}
+
+function getPlaceholderBg(category: string | null): string {
+  if (!category) return "#F3F4F6";
+  return CATEGORY_BG[category] ?? "#F3F4F6";
 }
 
 export function HeroDeal({
@@ -67,15 +67,15 @@ export function HeroDeal({
   const isLowest = isLowestIn90Days(deal);
   const insight = getHistoricalPriceInsight(deal);
   const source = getSourceLabel(deal.deal_url) ?? "Merchant";
-  const gradient = getCategoryGradient(deal.category);
+  const hasImage = Boolean(deal.image_url);
 
   return (
     <article
       className="d-hero-card"
-      style={{ background: gradient }}
+      style={!hasImage ? { background: getPlaceholderBg(deal.category) } : undefined}
       role="link"
       tabIndex={0}
-      aria-label={`Featured deal: ${deal.title} — ${currentPrice}`}
+      aria-label={`${deal.title} — ${currentPrice}`}
       onClick={() => {
         onOutboundClick?.();
         onViewDetails(deal.id);
@@ -88,6 +88,24 @@ export function HeroDeal({
         }
       }}
     >
+      {/* Image or placeholder */}
+      {hasImage ? (
+        <img
+          className="d-hero-img"
+          src={deal.image_url!}
+          alt={deal.title}
+          loading="eager"
+          decoding="async"
+        />
+      ) : (
+        <div className="d-hero-img-placeholder">
+          {getPlaceholderEmoji(deal.category)}
+        </div>
+      )}
+
+      {/* Gradient overlay (only with real image) */}
+      {hasImage && <div className="d-hero-overlay" />}
+
       <div className="d-hero-inner">
         <div className="d-hero-top">
           <div className="d-hero-badges">
@@ -95,34 +113,59 @@ export function HeroDeal({
               <span className="d-badge d-badge-hero-low">↓ Preço mínimo 90 dias</span>
             )}
             {deal.category && (
-              <span className="d-badge d-badge-hero-cat">{deal.category}</span>
+              <span
+                className="d-badge"
+                style={
+                  hasImage
+                    ? { background: "rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.9)", backdropFilter: "blur(4px)", height: "26px", padding: "0 10px", borderRadius: "8px", fontSize: "12px", fontWeight: "700" }
+                    : { background: "rgba(0,0,0,0.07)", color: "#374151", height: "26px", padding: "0 10px", borderRadius: "8px", fontSize: "12px", fontWeight: "700" }
+                }
+              >
+                {deal.category}
+              </span>
             )}
           </div>
         </div>
 
         <div className="d-hero-content">
-          <div className="d-hero-title">{deal.title}</div>
+          <div
+            className="d-hero-title"
+            style={hasImage ? undefined : { color: "#111111" }}
+          >
+            {deal.title}
+          </div>
 
           <div className="d-hero-price-area">
-            <span className="d-hero-price">{currentPrice}</span>
+            <span
+              className="d-hero-price"
+              style={hasImage ? undefined : { color: "#111111", textShadow: "none" }}
+            >
+              {currentPrice}
+            </span>
             {savingsValue > 0 && (
-              <span className="d-hero-savings">-{Math.round(savingsValue)}%</span>
+              <span
+                className="d-hero-savings"
+                style={hasImage ? undefined : { background: "rgba(0,0,0,0.08)", color: "#111" }}
+              >
+                -{Math.round(savingsValue)}%
+              </span>
             )}
             {previousPrice && (
-              <span className="d-hero-was">{previousPrice}</span>
+              <span
+                className="d-hero-was"
+                style={hasImage ? undefined : { color: "#666" }}
+              >
+                {previousPrice}
+              </span>
             )}
           </div>
 
-          {insight && <div className="d-hero-insight">{insight}</div>}
-
-          {deal.score_breakdown.price_history && (
-            <div className="d-hero-sparkline-row">
-              <PriceSparkline
-                history={deal.score_breakdown.price_history}
-                currentPrice={deal.current_price}
-                width={96}
-                height={36}
-              />
+          {insight && (
+            <div
+              className="d-hero-insight"
+              style={hasImage ? undefined : { color: "#555" }}
+            >
+              {insight}
             </div>
           )}
         </div>
@@ -131,6 +174,11 @@ export function HeroDeal({
           <button
             type="button"
             className="d-hero-cta"
+            style={
+              hasImage
+                ? undefined
+                : { background: "#111111", color: "#ffffff" }
+            }
             onClick={(e) => {
               e.stopPropagation();
               onOutboundClick?.();
@@ -139,7 +187,12 @@ export function HeroDeal({
           >
             Ver deal →
           </button>
-          <span className="d-hero-source">{source}</span>
+          <span
+            className="d-hero-source"
+            style={hasImage ? undefined : { color: "#888" }}
+          >
+            {source}
+          </span>
         </div>
       </div>
     </article>
