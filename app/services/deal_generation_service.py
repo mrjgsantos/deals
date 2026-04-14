@@ -21,6 +21,7 @@ MIN_PREVIOUS_PRICE_OBSERVATIONS_30D = 3
 MIN_PREVIOUS_PRICE_OBSERVATIONS_90D = 3
 MIN_PREVIOUS_PRICE_OBSERVATIONS_ALL_TIME = 4
 AUTO_PUBLISH_QUALITY_THRESHOLD = 70
+MEDIUM_CONFIDENCE_AUTO_PUBLISH_THRESHOLD = 80
 BORDERLINE_REVIEW_THRESHOLD = 60
 BORDERLINE_REVIEW_PRIORITY = 150
 STANDARD_REVIEW_PRIORITY = 100
@@ -217,7 +218,16 @@ class DealGenerationService:
 
     def _should_auto_publish(self, scored) -> bool:
         quality_score = scored.quality.score or 0
-        return scored.quality.promotable and quality_score >= AUTO_PUBLISH_QUALITY_THRESHOLD
+        if not scored.quality.promotable:
+            return False
+        confidence = scored.quality.confidence_level
+        if confidence == "low":
+            # Not enough history — always route to manual review
+            return False
+        if confidence == "medium":
+            # Require a higher bar to compensate for sparse history
+            return quality_score >= MEDIUM_CONFIDENCE_AUTO_PUBLISH_THRESHOLD
+        return quality_score >= AUTO_PUBLISH_QUALITY_THRESHOLD
 
     def _review_priority(self, scored) -> int:
         quality_score = scored.quality.score or 0
@@ -303,6 +313,7 @@ class DealGenerationService:
         return {
             "quality_score": scored.quality.score,
             "quality_reasons": scored.quality.reasons,
+            "confidence_level": scored.quality.confidence_level,
             "business_score": scored.business.score,
             "business_reasons": scored.business.reasons,
             "promotable": scored.quality.promotable,
@@ -330,17 +341,24 @@ class DealGenerationService:
         preserve_published: bool,
     ) -> dict:
         quality_score = scored.quality.score or 0
+        confidence = scored.quality.confidence_level
         if preserve_published:
             reason = "preserved_existing_publication"
         elif auto_publish:
             reason = "auto_publish_threshold_met"
+        elif confidence == "low":
+            reason = "low_confidence_pending_review"
+        elif confidence == "medium" and quality_score < MEDIUM_CONFIDENCE_AUTO_PUBLISH_THRESHOLD:
+            reason = "medium_confidence_below_threshold"
         elif quality_score >= BORDERLINE_REVIEW_THRESHOLD:
             reason = "borderline_manual_review"
         else:
             reason = "quality_below_auto_publish_threshold"
         return {
             "quality_score": quality_score,
+            "confidence_level": confidence,
             "auto_publish_threshold": AUTO_PUBLISH_QUALITY_THRESHOLD,
+            "medium_confidence_threshold": MEDIUM_CONFIDENCE_AUTO_PUBLISH_THRESHOLD,
             "auto_publish": auto_publish,
             "preserve_published": preserve_published,
             "review_bucket": "borderline" if quality_score >= BORDERLINE_REVIEW_THRESHOLD else "standard",

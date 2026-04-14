@@ -3300,3 +3300,62 @@
 2026-04-14 08:40:57,485 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
 2026-04-14 08:40:58,799 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
 2026-04-14 08:50:59,100 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 09:00:59,397 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 09:03:28,423 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 09:03:29,390 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 09:03:30,775 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 09:03:31,986 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 09:03:32,719 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 09:03:34,034 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 09:13:34,339 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 09:19:24,269 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 09:19:25,116 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 09:19:26,494 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:25:29,761 INFO jobs.background_keepa_scheduler background_keepa_scheduler_disabled enable_background_jobs=false
+2026-04-14 10:26:10,925 INFO jobs.background_keepa_scheduler background_keepa_scheduler_disabled enable_background_jobs=false
+2026-04-14 09:29:26,875 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 09:39:27,243 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 09:49:27,565 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 09:59:22,046 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 09:59:22,916 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 09:59:24,317 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 09:59:47,142 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 09:59:47,929 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 09:59:49,298 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 09:59:52,152 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 09:59:52,861 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 09:59:54,193 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 09:59:57,105 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 09:59:57,813 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 09:59:59,197 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:00:01,657 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 10:00:02,408 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 10:00:03,703 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:00:06,860 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 10:00:07,611 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 10:00:08,929 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:00:13,602 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 10:00:14,314 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 10:00:15,630 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:00:16,897 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 10:00:17,594 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 10:00:18,908 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:00:24,860 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 10:00:25,610 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 10:00:26,985 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:00:31,198 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 10:00:31,910 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 10:00:33,279 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:00:35,551 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 10:00:36,286 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 10:00:37,648 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:00:41,952 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 10:00:42,688 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 10:00:43,998 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:00:50,250 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 10:00:51,027 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 10:00:52,392 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:01:20,277 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 10:01:21,297 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 10:01:22,674 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 10:01:35,435 INFO jobs.background_keepa_scheduler background_keepa_scheduler_disabled enable_background_jobs=false

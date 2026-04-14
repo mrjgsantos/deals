@@ -116,7 +116,9 @@ def test_strong_history_support_beats_weak_history_support() -> None:
 
     assert strong_quality.score > weak_quality.score
     assert "strong_history_support" in strong_quality.reasons
-    assert "weak_demand_signal" in weak_quality.reasons
+    assert strong_quality.confidence_level == "high"
+    assert "low_historical_confidence" in weak_quality.reasons
+    assert weak_quality.confidence_level == "medium"
 
 
 def test_shallow_history_discount_gets_penalized() -> None:
@@ -130,7 +132,8 @@ def test_shallow_history_discount_gets_penalized() -> None:
         )
     )
 
-    assert "weak_demand_signal" in quality.reasons
+    assert "low_historical_confidence" in quality.reasons
+    assert quality.confidence_level == "medium"
     assert quality.score <= 80
 
 
@@ -197,7 +200,8 @@ def test_bad_quality_input_cannot_reach_unrealistically_strong_score() -> None:
     )
 
     assert quality.score < 90
-    assert "weak_demand_signal" in quality.reasons
+    assert "low_historical_confidence" in quality.reasons
+    assert quality.confidence_level == "low"
 
 
 def test_historically_strong_low_price_scores_better_than_non_low_supported_price() -> None:
@@ -366,7 +370,8 @@ def test_quality_score_rejects_weak_discount_vs_historical_average() -> None:
     assert "weak_discount_vs_historical_average" in quality.reasons
 
 
-def test_quality_score_rejects_weak_demand_signal() -> None:
+def test_quality_score_penalizes_medium_historical_confidence() -> None:
+    # obs_90d=4 → MEDIUM tier: deal survives with a penalty rather than being killed
     quality = score_deal_quality(
         make_input(
             aggregation=make_aggregation(
@@ -377,9 +382,41 @@ def test_quality_score_rejects_weak_demand_signal() -> None:
         )
     )
 
-    assert quality.promotable is False
-    assert quality.score == 0
-    assert "weak_demand_signal" in quality.reasons
+    assert quality.confidence_level == "medium"
+    assert "low_historical_confidence" in quality.reasons
+    assert quality.score > 0
+
+
+def test_quality_score_penalizes_low_historical_confidence() -> None:
+    # obs_90d=2 → LOW tier: heavier penalty, forced to PENDING_REVIEW via auto-publish gate
+    quality = score_deal_quality(
+        make_input(
+            aggregation=make_aggregation(
+                observation_count_30d=0,
+                observation_count_90d=2,
+                observation_count_all_time=3,
+            )
+        )
+    )
+
+    assert quality.confidence_level == "low"
+    assert "low_historical_confidence" in quality.reasons
+    assert quality.score > 0
+
+
+def test_high_confidence_deals_carry_no_confidence_penalty() -> None:
+    quality = score_deal_quality(
+        make_input(
+            aggregation=make_aggregation(
+                observation_count_30d=15,
+                observation_count_90d=10,
+                observation_count_all_time=25,
+            )
+        )
+    )
+
+    assert quality.confidence_level == "high"
+    assert "low_historical_confidence" not in quality.reasons
 
 
 def test_quality_score_boosts_recognized_brands() -> None:

@@ -60,6 +60,7 @@ class DealScoringInput:
 class DealQualityScore:
     score: int
     promotable: bool
+    confidence_level: str = "high"
     reasons: list[str] = field(default_factory=list)
 
 

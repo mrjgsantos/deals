@@ -97,10 +97,11 @@ def score_deal(input_data: DealScoringInput) -> ScoredDeal:
 def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
     reasons: list[str] = []
     normalized_text = _normalized_text(input_data)
+    confidence = _observation_confidence_tier(input_data)
 
     if input_data.fake_discount_analysis.is_fake_discount:
         reasons.append("fake_discount_detected")
-        return DealQualityScore(score=0, promotable=False, reasons=reasons)
+        return DealQualityScore(score=0, promotable=False, confidence_level=confidence, reasons=reasons)
 
     score = 50
     baseline = _best_baseline(input_data)
@@ -130,19 +131,31 @@ def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
         historical_discount = historical_discount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         if historical_discount < Decimal("15"):
             reasons.append("weak_discount_vs_historical_average")
-            return DealQualityScore(score=0, promotable=False, reasons=reasons)
+            if confidence == "high":
+                # Hard kill only when historical data is reliable
+                return DealQualityScore(score=0, promotable=False, confidence_level=confidence, reasons=reasons)
+            else:
+                # Sparse history: penalise but don't discard — the average may not be representative
+                score -= 15
 
     if input_data.current_price < Decimal("15") and not high_demand_category:
         reasons.append("low_price_low_demand")
-        return DealQualityScore(score=0, promotable=False, reasons=reasons)
+        return DealQualityScore(score=0, promotable=False, confidence_level=confidence, reasons=reasons)
 
     if _is_low_signal_commodity(normalized_text):
         reasons.append("low_signal_commodity")
-        return DealQualityScore(score=0, promotable=False, reasons=reasons)
+        return DealQualityScore(score=0, promotable=False, confidence_level=confidence, reasons=reasons)
 
-    if _is_weak_demand_signal(input_data):
-        reasons.append("weak_demand_signal")
-        return DealQualityScore(score=0, promotable=False, reasons=reasons)
+    # Graded confidence penalty — replaces the former hard weak_demand_signal disqualifier.
+    # LOW  (obs_90d < 3):                   -20, sends deal to PENDING_REVIEW via auto-publish gate
+    # MEDIUM (obs_90d 3-7 or all_time < 20): -10, auto-publish requires higher score threshold
+    # HIGH:                                   no penalty
+    if confidence == "low":
+        score -= 20
+        reasons.append("low_historical_confidence")
+    elif confidence == "medium":
+        score -= 10
+        reasons.append("low_historical_confidence")
 
     if input_data.aggregation.all_time_min is not None:
         if input_data.current_price <= input_data.aggregation.all_time_min:
@@ -181,6 +194,7 @@ def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
     return DealQualityScore(
         score=score,
         promotable=promotable,
+        confidence_level=confidence,
         reasons=reasons,
     )
 
@@ -318,9 +332,14 @@ def _is_low_signal_commodity(normalized_text: str) -> bool:
     )
 
 
-def _is_weak_demand_signal(input_data: DealScoringInput) -> bool:
+def _observation_confidence_tier(input_data: DealScoringInput) -> str:
+    """Return 'high', 'medium', or 'low' based on local price-observation depth."""
     aggregation = input_data.aggregation
-    return aggregation.observation_count_90d < 8 or aggregation.observation_count_all_time < 20
+    if aggregation.observation_count_90d >= 8 and aggregation.observation_count_all_time >= 20:
+        return "high"
+    if aggregation.observation_count_90d >= 3:
+        return "medium"
+    return "low"
 
 
 def _quality_category_adjustment(*, high_demand_category: bool, recognized_brand: bool) -> tuple[int, list[str]]:

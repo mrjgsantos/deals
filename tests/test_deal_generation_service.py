@@ -133,11 +133,12 @@ def make_aggregation() -> PriceAggregation:
     )
 
 
-def make_scored_result(*, quality_score: int, promotable: bool = True):
+def make_scored_result(*, quality_score: int, promotable: bool = True, confidence_level: str = "high"):
     return SimpleNamespace(
         quality=SimpleNamespace(
             score=quality_score,
             promotable=promotable,
+            confidence_level=confidence_level,
             reasons=["strong_history_support"] if quality_score >= 65 else ["weak_discount_support"],
         ),
         business=SimpleNamespace(

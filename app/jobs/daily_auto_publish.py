@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.db.enums import DealStatus
 from app.db.models import Deal
 from app.jobs.common import job_session, run_job
-from app.services.deal_generation_service import AUTO_PUBLISH_QUALITY_THRESHOLD
+from app.services.deal_generation_service import AUTO_PUBLISH_QUALITY_THRESHOLD, MEDIUM_CONFIDENCE_AUTO_PUBLISH_THRESHOLD
 
 
 def main() -> int:
@@ -42,8 +42,19 @@ def main() -> int:
                         quality_score = metadata.get("quality_score") or 0
                         promotable = metadata.get("promotable", False)
                         fake_discount = metadata.get("fake_discount", False)
+                        # Default "high" preserves backward-compat for deals scored before
+                        # the confidence tier was introduced.
+                        confidence_level = metadata.get("confidence_level", "high")
 
                         if not promotable or fake_discount or quality_score < AUTO_PUBLISH_QUALITY_THRESHOLD:
+                            skipped_count += 1
+                            continue
+
+                        if confidence_level == "low":
+                            skipped_count += 1
+                            continue
+
+                        if confidence_level == "medium" and quality_score < MEDIUM_CONFIDENCE_AUTO_PUBLISH_THRESHOLD:
                             skipped_count += 1
                             continue
 
