@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -69,8 +70,18 @@ class IngestionService:
             commit,
         )
 
+        total_records = len(parsed_records)
         for parsed_record in parsed_records:
             result.processed += 1
+            logger.info(
+                "ingestion_record_start source=%s parser=%s record=%s/%s external_id=%s",
+                source.slug,
+                self.parser.parser_name,
+                result.processed,
+                total_records,
+                parsed_record.external_id,
+            )
+            record_start = time.monotonic()
             raw_record = RawIngestionRecord(
                 source_id=source.id,
                 parser_name=self.parser.parser_name,
@@ -107,6 +118,14 @@ class IngestionService:
                         )
                         result.accepted += 1
                 result.records.append(write_result)
+                logger.info(
+                    "ingestion_record_done source=%s record=%s/%s external_id=%s elapsed_s=%.2f",
+                    source.slug,
+                    result.processed,
+                    total_records,
+                    parsed_record.external_id,
+                    time.monotonic() - record_start,
+                )
             except RecordRejectedError as exc:
                 raw_record.status = "rejected"
                 raw_record.rejection_reason = str(exc)
@@ -120,17 +139,26 @@ class IngestionService:
                         rejection_reason=str(exc),
                     )
                 )
+                logger.info(
+                    "ingestion_record_done source=%s record=%s/%s external_id=%s status=rejected elapsed_s=%.2f",
+                    source.slug,
+                    result.processed,
+                    total_records,
+                    parsed_record.external_id,
+                    time.monotonic() - record_start,
+                )
             except Exception as exc:
                 raw_record.status = "failed"
                 raw_record.rejection_reason = "internal_error"
                 raw_record.processed_at = datetime.now(timezone.utc)
                 db.flush()
                 logger.exception(
-                    "ingestion_record_failed source=%s parser=%s external_id=%s error=%s",
+                    "ingestion_record_failed source=%s parser=%s external_id=%s error=%s elapsed_s=%.2f",
                     source.slug,
                     self.parser.parser_name,
                     parsed_record.external_id,
                     exc,
+                    time.monotonic() - record_start,
                 )
                 result.rejected += 1
                 result.records.append(
@@ -163,7 +191,16 @@ class IngestionService:
         keepa_run_state: KeepaFetchRunState | None = None,
         dedupe_asin: str | None = None,
     ) -> IngestionRecordResult:
+        _match_start = time.monotonic()
         match_decision = self.matcher.match_normalized_record(db, normalized)
+        logger.debug(
+            "ingestion_phase_match source=%s external_id=%s elapsed_s=%.2f matched=%s strategy=%s",
+            source.slug,
+            normalized.external_id,
+            time.monotonic() - _match_start,
+            match_decision.matched,
+            match_decision.match_strategy,
+        )
         merchant = self._get_or_create_merchant(db, normalized)
         product_source_record = self._get_or_create_product_source_record(db, source, normalized)
         db.add(product_source_record)
@@ -207,11 +244,19 @@ class IngestionService:
             normalized=normalized,
             source_slug=source.slug,
         )
+        _history_start = time.monotonic()
         keepa_history_inserted = self._persist_keepa_history_observations_safely(
             db=db,
             source=source,
             product_source_record=product_source_record,
             normalized=normalized,
+        )
+        logger.info(
+            "ingestion_phase_keepa_history source=%s external_id=%s inserted=%s elapsed_s=%.2f",
+            source.slug,
+            normalized.external_id,
+            keepa_history_inserted,
+            time.monotonic() - _history_start,
         )
         keepa_fetch_inserted = self._enrich_with_keepa_history_if_needed_safely(
             db=db,
@@ -232,11 +277,18 @@ class IngestionService:
             asin=dedupe_asin,
             processed_at=raw_record.processed_at,
         )
+        _sync_start = time.monotonic()
         self._sync_review_candidate(
             db=db,
             source=source,
             product_source_record=product_source_record,
             price_observation=price_observation,
+        )
+        logger.info(
+            "ingestion_phase_deal_sync source=%s external_id=%s elapsed_s=%.2f",
+            source.slug,
+            normalized.external_id,
+            time.monotonic() - _sync_start,
         )
         logger.info(
             "ingestion_record_persisted source=%s external_id=%s status=%s match_strategy=%s match_reason=%s matched=%s duplicate_observation=%s keepa_history_inserted=%s keepa_fetch_inserted=%s product_source_record_id=%s product_variant_id=%s price_observation_id=%s",
@@ -662,6 +714,23 @@ class IngestionService:
             return 0
 
         filtered_points = self._recent_unique_keepa_history_points(history_points=history_points, normalized=normalized)
+        if not filtered_points:
+            return 0
+
+        logger.info(
+            "keepa_history_bulk_start source=%s external_id=%s candidate_points=%s product_source_record_id=%s",
+            source.slug,
+            normalized.external_id,
+            len(filtered_points),
+            product_source_record.id,
+        )
+        # Bulk-load all existing hashes for this record in a single SELECT —
+        # avoids N round-trips to the remote DB (one per candidate point).
+        existing_hashes = self._load_existing_price_observation_hashes(
+            db, product_source_record_id=product_source_record.id
+        )
+
+        asin = (normalized.source_attributes or {}).get("asin")
         inserted = 0
         for point in filtered_points:
             observed_hash = self._build_observed_hash_for_values(
@@ -675,12 +744,7 @@ class IngestionService:
                 availability_status=AvailabilityStatus.UNKNOWN,
                 observed_at=point.observed_at,
             )
-            existing = self._find_existing_price_observation_by_hash(
-                db,
-                product_source_record_id=product_source_record.id,
-                observed_hash=observed_hash,
-            )
-            if existing is not None:
+            if observed_hash in existing_hashes:
                 continue
 
             db.add(
@@ -698,12 +762,16 @@ class IngestionService:
                     metadata_json={
                         "source": source.slug,
                         "derived_from": "keepa_history",
-                        "asin": (normalized.source_attributes or {}).get("asin"),
+                        "asin": asin,
                     },
                 )
             )
-            db.flush()
             inserted += 1
+
+        # Single flush for all new observations — replaces N individual flushes.
+        if inserted > 0:
+            db.flush()
+
         return inserted
 
     def _enrich_with_keepa_history_if_needed_safely(
@@ -888,6 +956,25 @@ class IngestionService:
                 PriceObservation.product_source_record_id == product_source_record_id,
                 PriceObservation.observed_hash == observed_hash,
             )
+        )
+
+    def _load_existing_price_observation_hashes(
+        self,
+        db: Session,
+        *,
+        product_source_record_id,
+    ) -> set[str]:
+        """Return all observed_hash values for a product_source_record in one query.
+
+        Used to replace per-point existence checks with a single bulk SELECT,
+        eliminating the N+1 flush pattern in keepa history ingestion.
+        """
+        return set(
+            db.scalars(
+                select(PriceObservation.observed_hash).where(
+                    PriceObservation.product_source_record_id == product_source_record_id,
+                )
+            ).all()
         )
 
     def _clean_identifier(self, value: Any) -> str | None:

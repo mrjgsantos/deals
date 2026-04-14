@@ -58,6 +58,14 @@ class FakeSession:
     def scalar(self, stmt):
         return self.scalar_result
 
+    def scalars(self, stmt):
+        # Return an object whose .all() yields an empty set — no pre-existing
+        # observations in the fake session, so all history points are new.
+        class _Result:
+            def all(self):
+                return []
+        return _Result()
+
     @contextmanager
     def begin_nested(self):
         yield self
