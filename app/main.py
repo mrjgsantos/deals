@@ -52,9 +52,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Explicit origins from env (e.g. custom domains).
+    # Vercel deployments (*.vercel.app) are always allowed via regex so no
+    # Render env var is required for standard Vercel deployments.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allowed_origins,
+        allow_origin_regex=r"https://.*\.vercel\.app",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
