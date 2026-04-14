@@ -92,7 +92,7 @@ class StubIngestionService(IngestionService):
     def _get_or_create_merchant(self, db, normalized):
         return Merchant(id=uuid4(), canonical_name="Merchant", slug="merchant")
 
-    def _get_or_create_product_source_record(self, db, source, normalized):
+    def _get_or_create_product_source_record(self, db, source, normalized, *, cache=None):
         return ProductSourceRecord(
             id=uuid4(),
             source_id=source.id,
@@ -291,12 +291,12 @@ class DedupeAwareIngestionService(StubIngestionService):
         self.checkpoint_last_processed_at = checkpoint_last_processed_at
         self.touched_asins: list[str] = []
 
-    def _get_asin_checkpoint(self, *, db, source, asin):
+    def _get_asin_checkpoint(self, *, db, source, asin, cache=None):
         if self.checkpoint_last_processed_at is None:
             return None
         return SimpleNamespace(last_processed_at=self.checkpoint_last_processed_at)
 
-    def _touch_asin_checkpoint(self, *, db, source, asin, processed_at):
+    def _touch_asin_checkpoint(self, *, db, source, asin, processed_at, cache=None):
         if asin is not None:
             self.touched_asins.append(asin)
 

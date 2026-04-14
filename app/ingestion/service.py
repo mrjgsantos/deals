@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -43,6 +44,24 @@ MAX_KEEPA_HISTORY_POINTS = 90
 ASIN_DEDUPE_WINDOW = timedelta(hours=24)
 
 
+@dataclass
+class _BatchReadCache:
+    """Bulk-preloaded read cache for one ingest() call.
+
+    Replaces per-record SELECT queries with Python dict lookups for PSRs and
+    ASIN checkpoints.  Built once before the record loop; updated whenever a
+    new record is created so subsequent records in the same batch can reuse it.
+
+    Semantics:
+    - Key present, value = object  → exists in DB (or just created)
+    - Key present, value = None    → was queried in the bulk load, not found
+    - Key absent                   → was not pre-loaded (falls back to SELECT)
+    """
+
+    psrs: dict[str, ProductSourceRecord | None] = field(default_factory=dict)
+    checkpoints: dict[str, AsinIngestionCheckpoint | None] = field(default_factory=dict)
+
+
 class IngestionService:
     def __init__(
         self,
@@ -71,6 +90,18 @@ class IngestionService:
         )
 
         total_records = len(parsed_records)
+
+        # Bulk pre-load PSRs and ASIN checkpoints for all records in this batch.
+        # Replaces per-record SELECT with two queries before the loop.
+        batch_cache = self._build_batch_read_cache(db, source, parsed_records)
+        logger.info(
+            "ingestion_prebatch_load_done source=%s records=%s cached_psrs=%s cached_checkpoints=%s",
+            source.slug,
+            total_records,
+            sum(1 for v in batch_cache.psrs.values() if v is not None),
+            sum(1 for v in batch_cache.checkpoints.values() if v is not None),
+        )
+
         for parsed_record in parsed_records:
             result.processed += 1
             logger.info(
@@ -100,6 +131,7 @@ class IngestionService:
                         db=db,
                         source=source,
                         asin=dedupe_asin,
+                        cache=batch_cache,
                     ):
                         write_result = self._mark_dedupe_skipped(
                             raw_record=raw_record,
@@ -115,6 +147,7 @@ class IngestionService:
                             normalized=normalized,
                             keepa_run_state=keepa_run_state,
                             dedupe_asin=dedupe_asin,
+                            cache=batch_cache,
                         )
                         result.accepted += 1
                 result.records.append(write_result)
@@ -190,10 +223,12 @@ class IngestionService:
         normalized: NormalizedIngestionRecord,
         keepa_run_state: KeepaFetchRunState | None = None,
         dedupe_asin: str | None = None,
+        cache: _BatchReadCache | None = None,
     ) -> IngestionRecordResult:
+        # ── Phase: matching ──────────────────────────────────────────────────
         _match_start = time.monotonic()
         match_decision = self.matcher.match_normalized_record(db, normalized)
-        logger.debug(
+        logger.info(
             "ingestion_phase_match source=%s external_id=%s elapsed_s=%.2f matched=%s strategy=%s",
             source.slug,
             normalized.external_id,
@@ -201,8 +236,11 @@ class IngestionService:
             match_decision.matched,
             match_decision.match_strategy,
         )
+
+        # ── Phase: get_or_create (merchant / PSR / product / variant) ────────
+        _goc_start = time.monotonic()
         merchant = self._get_or_create_merchant(db, normalized)
-        product_source_record = self._get_or_create_product_source_record(db, source, normalized)
+        product_source_record = self._get_or_create_product_source_record(db, source, normalized, cache=cache)
         db.add(product_source_record)
         product = self._get_or_create_product(db, product_source_record, normalized, merchant, match_decision)
         product_variant = self._get_or_create_product_variant(
@@ -211,6 +249,15 @@ class IngestionService:
             product,
             normalized,
             match_decision,
+        )
+        logger.info(
+            "ingestion_phase_get_or_create source=%s external_id=%s elapsed_s=%.2f psr_id=%s product_id=%s variant_id=%s",
+            source.slug,
+            normalized.external_id,
+            time.monotonic() - _goc_start,
+            product_source_record.id,
+            product.id if product is not None else None,
+            product_variant.id if product_variant is not None else None,
         )
 
         product_source_record.merchant = merchant
@@ -238,12 +285,23 @@ class IngestionService:
             product_source_record.first_seen_at = normalized.observed_at
         product_source_record.matched_at = datetime.now(timezone.utc)
 
+        # ── Phase: price observation ─────────────────────────────────────────
+        _price_obs_start = time.monotonic()
         price_observation, duplicate_observation = self._create_or_reuse_price_observation(
             db=db,
             product_source_record=product_source_record,
             normalized=normalized,
             source_slug=source.slug,
         )
+        logger.info(
+            "ingestion_phase_price_observation source=%s external_id=%s duplicate=%s elapsed_s=%.2f",
+            source.slug,
+            normalized.external_id,
+            duplicate_observation,
+            time.monotonic() - _price_obs_start,
+        )
+
+        # ── Phase: Keepa history persistence ─────────────────────────────────
         _history_start = time.monotonic()
         keepa_history_inserted = self._persist_keepa_history_observations_safely(
             db=db,
@@ -267,15 +325,25 @@ class IngestionService:
             keepa_run_state=keepa_run_state,
         )
 
+        # ── Phase: checkpoint + deal sync ────────────────────────────────────
         raw_record.status = "duplicate" if duplicate_observation else "accepted"
         raw_record.product_source_record = product_source_record
         raw_record.normalized_payload = normalized.model_dump(mode="json")
         raw_record.processed_at = datetime.now(timezone.utc)
+        _checkpoint_start = time.monotonic()
         self._touch_asin_checkpoint(
             db=db,
             source=source,
             asin=dedupe_asin,
             processed_at=raw_record.processed_at,
+            cache=cache,
+        )
+        logger.info(
+            "ingestion_phase_checkpoint source=%s external_id=%s asin=%s elapsed_s=%.2f",
+            source.slug,
+            normalized.external_id,
+            dedupe_asin,
+            time.monotonic() - _checkpoint_start,
         )
         _sync_start = time.monotonic()
         self._sync_review_candidate(
@@ -320,10 +388,11 @@ class IngestionService:
         source: Source,
         asin: str | None,
         now: datetime | None = None,
+        cache: _BatchReadCache | None = None,
     ) -> bool:
         if asin is None:
             return False
-        checkpoint = self._get_asin_checkpoint(db=db, source=source, asin=asin)
+        checkpoint = self._get_asin_checkpoint(db=db, source=source, asin=asin, cache=cache)
         if checkpoint is None:
             return False
         reference_time = now or datetime.now(timezone.utc)
@@ -358,7 +427,10 @@ class IngestionService:
         db: Session,
         source: Source,
         asin: str,
+        cache: _BatchReadCache | None = None,
     ) -> AsinIngestionCheckpoint | None:
+        if cache is not None and asin in cache.checkpoints:
+            return cache.checkpoints[asin]
         return db.scalar(
             select(AsinIngestionCheckpoint).where(
                 AsinIngestionCheckpoint.source_id == source.id,
@@ -373,10 +445,11 @@ class IngestionService:
         source: Source,
         asin: str | None,
         processed_at: datetime,
+        cache: _BatchReadCache | None = None,
     ) -> None:
         if asin is None:
             return
-        checkpoint = self._get_asin_checkpoint(db=db, source=source, asin=asin)
+        checkpoint = self._get_asin_checkpoint(db=db, source=source, asin=asin, cache=cache)
         if checkpoint is None:
             checkpoint = AsinIngestionCheckpoint(
                 source_id=source.id,
@@ -384,11 +457,54 @@ class IngestionService:
                 last_processed_at=processed_at,
             )
             db.add(checkpoint)
+            if cache is not None:
+                cache.checkpoints[asin] = checkpoint
             return
         checkpoint.last_processed_at = processed_at
 
     def _normalized_asin(self, normalized: NormalizedIngestionRecord) -> str | None:
         return normalize_asin((normalized.source_attributes or {}).get("asin"))
+
+    def _build_batch_read_cache(
+        self,
+        db: Session,
+        source: Source,
+        parsed_records: list,
+    ) -> _BatchReadCache:
+        """Build a _BatchReadCache with one SELECT per entity type for all records.
+
+        Replaces per-record SELECT calls for PSRs and ASIN checkpoints with a
+        single bulk query each, reducing DB round-trips from O(N) to O(1).
+        """
+        external_ids = [r.external_id for r in parsed_records]
+
+        # Bulk-load existing PSRs by (source_id, external_id)
+        loaded_psrs = db.scalars(
+            select(ProductSourceRecord).where(
+                ProductSourceRecord.source_id == source.id,
+                ProductSourceRecord.external_id.in_(external_ids),
+            )
+        ).all()
+        psr_by_id = {psr.external_id: psr for psr in loaded_psrs}
+        # Store None for external_ids not found so cache knows "queried, not found"
+        psrs_cache = {eid: psr_by_id.get(eid) for eid in external_ids}
+
+        # Bulk-load ASIN checkpoints.  For Keepa records the external_id is the ASIN;
+        # normalize_asin handles validation and normalisation.
+        potential_asins = [normalize_asin(eid) for eid in external_ids]
+        valid_asins = [a for a in potential_asins if a is not None]
+        checkpoints_cache: dict[str, AsinIngestionCheckpoint | None] = {}
+        if valid_asins:
+            loaded_checkpoints = db.scalars(
+                select(AsinIngestionCheckpoint).where(
+                    AsinIngestionCheckpoint.source_id == source.id,
+                    AsinIngestionCheckpoint.asin.in_(valid_asins),
+                )
+            ).all()
+            chk_by_asin = {chk.asin: chk for chk in loaded_checkpoints}
+            checkpoints_cache = {asin: chk_by_asin.get(asin) for asin in valid_asins}
+
+        return _BatchReadCache(psrs=psrs_cache, checkpoints=checkpoints_cache)
 
     def _get_source(self, db: Session, source_slug: str) -> Source:
         source = db.scalar(select(Source).where(Source.slug == source_slug))
@@ -426,15 +542,24 @@ class IngestionService:
         db: Session,
         source: Source,
         normalized: NormalizedIngestionRecord,
+        *,
+        cache: _BatchReadCache | None = None,
     ) -> ProductSourceRecord:
-        existing = db.scalar(
-            select(ProductSourceRecord).where(
-                ProductSourceRecord.source_id == source.id,
-                ProductSourceRecord.external_id == normalized.external_id,
+        # Check bulk pre-load cache first (None value = pre-loaded, not found in DB)
+        if cache is not None and normalized.external_id in cache.psrs:
+            existing = cache.psrs[normalized.external_id]
+            if existing is not None:
+                return existing
+        else:
+            existing = db.scalar(
+                select(ProductSourceRecord).where(
+                    ProductSourceRecord.source_id == source.id,
+                    ProductSourceRecord.external_id == normalized.external_id,
+                )
             )
-        )
-        if existing is not None:
-            return existing
+            if existing is not None:
+                return existing
+
         product_source_record = ProductSourceRecord(
             source_id=source.id,
             external_id=normalized.external_id,
@@ -457,6 +582,8 @@ class IngestionService:
         )
         db.add(product_source_record)
         db.flush()
+        if cache is not None:
+            cache.psrs[normalized.external_id] = product_source_record
         return product_source_record
 
     def _get_or_create_product(

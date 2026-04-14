@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from app.db.enums import DealStatus
 from app.db.models import Deal, PriceObservation, ProductSourceRecord
@@ -20,12 +21,15 @@ def main() -> int:
 
         with job_session() as db:
             deals = db.scalars(
-                select(Deal).where(Deal.status.in_([DealStatus.PENDING_REVIEW, DealStatus.APPROVED]))
+                select(Deal)
+                .options(joinedload(Deal.product_source_record))
+                .where(Deal.status.in_([DealStatus.PENDING_REVIEW, DealStatus.APPROVED]))
             ).all()
 
             scored_count = 0
             skipped_count = 0
             failed_count = 0
+            logger.info("daily_scoring_starting deal_count=%s", len(deals))
             for deal in deals:
                 try:
                     with db.begin_nested():
@@ -80,6 +84,7 @@ def main() -> int:
                             aggregation=aggregation,
                         )
 
+                        psr = deal.product_source_record
                         scored = score_deal(
                             DealScoringInput(
                                 current_price=deal.current_price,
@@ -87,7 +92,7 @@ def main() -> int:
                                 aggregation=aggregation,
                                 fake_discount_analysis=fake_discount,
                                 title=deal.title,
-                                source_category=deal.category,
+                                source_category=psr.source_category if psr is not None else None,
                                 is_featured=deal.is_featured,
                                 merchant_priority=0,
                                 source_priority=0,
