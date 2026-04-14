@@ -1,15 +1,21 @@
+from sqlalchemy.engine import make_url
 from app.core.config import settings
 
-print(
-    "DB DEBUG",
-    {
-        "postgres_server": settings.postgres_server,
-        "postgres_port": settings.postgres_port,
-        "postgres_user": settings.postgres_user,
-        "postgres_db": settings.postgres_db,
-        "database_url": settings.database_url.replace(settings.postgres_password, "***"),
-    },
-)
+try:
+    parsed = make_url(settings.database_url)
+    print(
+        "DB DEBUG PARSED",
+        {
+            "drivername": parsed.drivername,
+            "username": parsed.username,
+            "host": parsed.host,
+            "port": parsed.port,
+            "database": parsed.database,
+            "query": dict(parsed.query),
+        },
+    )
+except Exception as exc:
+    print("DB DEBUG PARSE ERROR", repr(exc))
 
 from contextlib import asynccontextmanager
 import logging

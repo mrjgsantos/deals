@@ -3263,3 +3263,22 @@
 2026-04-14 07:06:43,480 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B09DP2XV1V reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:06:43.471871+00:00 failures=0
 2026-04-14 07:06:43,480 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=6 eligible_asins=0
 2026-04-14 07:06:43,480 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=6 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 07:16:43,541 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B07SYPYH5M reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:16:43.539050+00:00 failures=0
+2026-04-14 07:16:43,545 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B08NB7FCTC reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:16:43.539050+00:00 failures=0
+2026-04-14 07:16:43,547 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B09V35NLJG reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:16:43.539050+00:00 failures=0
+2026-04-14 07:16:43,550 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B09B8X9RGM reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:16:43.539050+00:00 failures=0
+2026-04-14 07:16:43,552 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B075JJRFVV reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:16:43.539050+00:00 failures=0
+2026-04-14 07:16:43,554 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B09DP2XV1V reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:16:43.539050+00:00 failures=0
+2026-04-14 07:16:43,555 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=6 eligible_asins=0
+2026-04-14 07:16:43,556 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=6 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 07:26:43,597 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B07SYPYH5M reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:26:43.593407+00:00 failures=0
+2026-04-14 07:26:43,605 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B08NB7FCTC reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:26:43.593407+00:00 failures=0
+2026-04-14 07:26:43,606 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B09V35NLJG reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:26:43.593407+00:00 failures=0
+2026-04-14 07:26:43,616 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B09B8X9RGM reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:26:43.593407+00:00 failures=0
+2026-04-14 07:26:43,618 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B075JJRFVV reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:26:43.593407+00:00 failures=0
+2026-04-14 07:26:43,620 INFO jobs.background_keepa_scheduler background_keepa_refresh_candidate_skipped asin=B09DP2XV1V reason=sufficient_local_history priority=high staleness=fresh next_eligible_at=2026-04-14T19:26:43.593407+00:00 failures=0
+2026-04-14 07:26:43,621 INFO jobs.background_keepa_scheduler background_keepa_refresh_started tracked_asins=6 eligible_asins=0
+2026-04-14 07:26:43,621 INFO jobs.background_keepa_scheduler background_keepa_refresh_complete tracked_asins=6 eligible_asins=0 fetched_products=0 accepted=0 rejected=0 failed_batches=0
+2026-04-14 07:33:04,745 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
+2026-04-14 07:33:05,759 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
+2026-04-14 07:33:07,135 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
