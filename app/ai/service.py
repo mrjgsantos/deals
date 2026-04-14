@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -40,10 +41,10 @@ class AICopyGenerationService:
             model_name=model_name,
             prompt_version=prompt_version,
             content=_serialize_validated_copy(validated),
-            metadata_json={
+            metadata_json=sanitize_for_json({
                 "input": asdict(input_data),
                 "warnings": validated.warnings,
-            },
+            }),
             generated_at=datetime.now(UTC),
         )
         db.add(draft)
@@ -61,3 +62,18 @@ def _serialize_validated_copy(validated: ValidatedDealCopy) -> str:
         },
         sort_keys=True,
     )
+
+
+def sanitize_for_json(obj: object) -> object:
+    """Recursively convert types that are not JSON-serializable.
+
+    Decimal → str  (preserves exact precision; metadata fields are for
+    auditability, not arithmetic, so float rounding is unacceptable).
+    """
+    if isinstance(obj, Decimal):
+        return str(obj)
+    if isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_for_json(v) for v in obj]
+    return obj

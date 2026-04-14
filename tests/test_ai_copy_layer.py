@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from decimal import Decimal
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from app.ai.prompt_builder import build_copy_prompt
 from app.ai.response_parser import parse_copy_response
 from app.ai.schemas import DealCopyOutput, StructuredDealCopyInput
+from app.ai.service import sanitize_for_json
 from app.ai.validator import validate_copy_output
 
 
@@ -127,3 +129,52 @@ def test_validator_requires_not_supported_verdict_for_fake_discount() -> None:
             ),
             make_input(fake_discount=True, promotable=False),
         )
+
+
+# --- sanitize_for_json ---
+
+
+def test_sanitize_for_json_converts_top_level_decimal() -> None:
+    assert sanitize_for_json(Decimal("59.99")) == "59.99"
+
+
+def test_sanitize_for_json_converts_decimal_in_dict() -> None:
+    result = sanitize_for_json({"price": Decimal("59.99"), "label": "sale"})
+    assert result == {"price": "59.99", "label": "sale"}
+
+
+def test_sanitize_for_json_converts_decimal_in_list() -> None:
+    result = sanitize_for_json([Decimal("10.00"), Decimal("20.50"), "unchanged"])
+    assert result == ["10.00", "20.50", "unchanged"]
+
+
+def test_sanitize_for_json_handles_nested_structures() -> None:
+    obj = {
+        "prices": [Decimal("59.99"), Decimal("79.99")],
+        "meta": {"avg_30d": Decimal("74.99"), "label": "deal"},
+    }
+    result = sanitize_for_json(obj)
+    assert result == {
+        "prices": ["59.99", "79.99"],
+        "meta": {"avg_30d": "74.99", "label": "deal"},
+    }
+
+
+def test_sanitize_for_json_preserves_none_and_primitives() -> None:
+    obj = {"a": None, "b": 42, "c": True, "d": "text"}
+    assert sanitize_for_json(obj) == obj
+
+
+def test_sanitize_for_json_on_ai_draft_input_payload_is_json_serializable() -> None:
+    # Mirrors exactly what generate_and_persist writes to metadata_json.
+    # If any Decimal slips through, json.dumps raises TypeError.
+    payload = sanitize_for_json({
+        "input": asdict(make_input()),
+        "warnings": [],
+    })
+    # Must not raise
+    serialized = json.dumps(payload)
+    loaded = json.loads(serialized)
+    assert loaded["input"]["current_price"] == "59.99"
+    assert loaded["input"]["savings_percent"] == "25.00"
+    assert loaded["input"]["avg_30d"] == "74.99"
