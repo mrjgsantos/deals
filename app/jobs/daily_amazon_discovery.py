@@ -35,6 +35,7 @@ from app.core.config import settings
 from app.ingestion.normalization import DefaultRecordNormalizer
 from app.ingestion.parsers.keepa import KeepaParser
 from app.ingestion.service import IngestionService
+from app.services.deal_generation_service import DealGenerationResult
 from app.integrations.amazon_es_discovery import (
     AmazonEsCandidate,
     AmazonEsCandidatePoolPage,
@@ -53,10 +54,25 @@ from app.jobs.common import job_session, run_job
 from app.matching.service import MatchingService
 from scripts.ingest_keepa_bulk import SOURCE_SLUG, chunked, ensure_source
 
-DISCOVERY_KEEPA_BATCH_SIZE = 1
+# 10 ASINs per Keepa API call — reduces 60 fetches to 6, halves payload size vs MAX_BATCH_SIZE=20
+DISCOVERY_KEEPA_BATCH_SIZE = 10
 KEEPA_FETCH_TIMEOUT = 60.0
 KEEPA_FETCH_HARD_TIMEOUT = 120.0
 INGEST_STATEMENT_TIMEOUT_MS = 30_000
+
+
+class _NullDealGenerationService:
+    """Skip inline deal scoring for the discovery job.
+
+    Rationale: daily_scoring runs 2 hours later (08:00 UTC) and scores all
+    newly-ingested ProductSourceRecords.  Running aggregate_price_history_for_variant
+    + deal upsert queries inline here costs ~1.5–3 s per ASIN at remote-DB latency
+    with no benefit — the deal would be immediately re-scored and overwritten by the
+    scoring job anyway.
+    """
+
+    def sync_deal_for_source_record(self, db, *, source, product_source_record, price_observation):
+        return DealGenerationResult(deal=None, review_queue_item=None, eligible=False)
 
 
 def main() -> int:
@@ -235,6 +251,9 @@ def _run_keepa_ingest(
         parser=parser,
         normalizer=DefaultRecordNormalizer(),
         matcher=MatchingService(),
+        # Deal scoring is skipped here; daily_scoring (08:00 UTC) picks up all
+        # newly-ingested PSRs.  This removes ~1.5–3 s of DB round-trips per ASIN.
+        deal_generation_service=_NullDealGenerationService(),
     )
 
     total_accepted = 0
