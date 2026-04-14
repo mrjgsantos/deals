@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     postgres_password: str = "postgres"
     postgres_db: str = "deals"
 
+    cors_allowed_origins: list[str] = Field(default_factory=list)
+
     jobs_log_dir: str = "logs/jobs"
 
     ai_copy_model_name: str = "stub-model"
