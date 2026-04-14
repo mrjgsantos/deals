@@ -1,3 +1,4 @@
 2026-04-14 07:40:13,975 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=0 approved_unpublished=0 published=0 skipped=0 failed=0
 2026-04-14 07:40:30,099 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=0 approved_unpublished=0 published=0 skipped=0 failed=0
 2026-04-14 07:42:24,910 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=0 approved_unpublished=0 published=0 skipped=0 failed=0
+2026-04-14 08:14:18,118 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=15 approved_unpublished=0 published=0 skipped=15 failed=0
