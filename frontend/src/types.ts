@@ -88,6 +88,37 @@ export type ReviewItem = {
   deal: Deal;
 };
 
+export type ReviewQueueItem = {
+  id: string;
+  priority: number;
+  created_at: string;
+  deal_id: string;
+  title: string;
+  currency: string;
+  current_price: string;
+  previous_price: string | null;
+  savings_amount: string | null;
+  savings_percent: string | null;
+  deal_url: string | null;
+  source_id: string;
+  source_category: string | null;
+  image_url: string | null;
+  quality_score: number | null;
+  business_score: number | null;
+  promotable: boolean;
+  fake_discount: boolean;
+  confidence_level: string | null;
+  quality_reasons: string[];
+  price_history: DealPriceHistory | null;
+  asin: string | null;
+};
+
+export type ReviewQueuePage = {
+  items: ReviewQueueItem[];
+  total: number;
+  has_more: boolean;
+};
+
 export type ReviewDecision = {
   review_id: string;
   review_status: string;

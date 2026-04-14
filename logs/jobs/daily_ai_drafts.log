@@ -1,2 +1,5 @@
 2026-04-14 07:40:14,298 INFO jobs.daily_ai_drafts daily_ai_drafts_complete generated=0 skipped=0
 2026-04-14 07:40:30,418 INFO jobs.daily_ai_drafts daily_ai_drafts_complete generated=0 skipped=0
+2026-04-14 18:34:35,744 INFO jobs.daily_ai_drafts daily_ai_drafts_complete generated=0 skipped=32
+2026-04-14 18:35:50,551 INFO jobs.daily_ai_drafts daily_ai_drafts_complete generated=0 skipped=32
+2026-04-14 18:42:14,061 INFO jobs.daily_ai_drafts daily_ai_drafts_complete generated=2 skipped=89

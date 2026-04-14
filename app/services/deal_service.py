@@ -62,6 +62,46 @@ class ReviewQueueRecord:
 
 
 @dataclass(slots=True)
+class ReviewQueueListItemRecord:
+    """Lightweight DTO for the approval queue card view.
+
+    Contains only what is needed for rapid approve/reject decisions.
+    No ai_copy_draft, no summary, no product_variant hierarchy — those
+    are fetched on demand via the deal detail endpoint.
+    """
+
+    id: UUID
+    priority: int
+    created_at: datetime
+    deal_id: UUID
+    title: str
+    currency: str
+    current_price: Any
+    previous_price: Any
+    savings_amount: Any
+    savings_percent: Any
+    deal_url: str | None
+    source_id: UUID
+    source_category: str | None
+    image_url: str | None
+    quality_score: int | None
+    business_score: int | None
+    promotable: bool
+    fake_discount: bool
+    confidence_level: str | None
+    quality_reasons: list[str]
+    price_history: dict | None
+    asin: str | None
+
+
+@dataclass(slots=True)
+class ReviewQueuePage:
+    items: list[ReviewQueueListItemRecord]
+    total: int
+    has_more: bool
+
+
+@dataclass(slots=True)
 class PublishedDealsPage:
     deals: list[DealRecord]
     has_more: bool
@@ -200,7 +240,7 @@ class DealQueryService:
         }
 
     def list_pending_review_items(self, db: Session) -> list[ReviewQueueRecord]:
-        stmt = (
+        queue_stmt = (
             select(ReviewQueue)
             .join(Deal, Deal.id == ReviewQueue.entity_id)
             .where(
@@ -210,21 +250,102 @@ class DealQueryService:
             )
             .order_by(ReviewQueue.priority.asc(), ReviewQueue.created_at.asc())
         )
-        review_items = db.scalars(stmt).all()
-        return [self._to_review_queue_record(db, item) for item in review_items]
+        review_items = db.scalars(queue_stmt).all()
+        if not review_items:
+            return []
 
-    def _to_review_queue_record(self, db: Session, item: ReviewQueue) -> ReviewQueueRecord:
-        deal = db.get(Deal, item.entity_id)
-        if deal is None:
-            raise ValueError(f"deal_not_found_for_review_queue:{item.id}")
-        return ReviewQueueRecord(
+        # Batch-load all deals with eager loading — replaces N individual db.get() calls.
+        deal_ids = [item.entity_id for item in review_items]
+        deals_stmt = self._base_query().where(Deal.id.in_(deal_ids))
+        deals_by_id = {deal.id: deal for deal in db.scalars(deals_stmt).all()}
+
+        results = []
+        for item in review_items:
+            deal = deals_by_id.get(item.entity_id)
+            if deal is None:
+                continue
+            results.append(ReviewQueueRecord(
+                id=item.id,
+                status=item.status.value,
+                reason=item.reason,
+                priority=item.priority,
+                created_at=item.created_at,
+                resolved_at=item.resolved_at,
+                deal=self._to_record(deal),
+            ))
+        return results
+
+    def list_review_queue(self, db: Session, *, limit: int = 50, offset: int = 0) -> ReviewQueuePage:
+        """Lightweight paginated queue for the approval card view.
+
+        Issues 3 queries regardless of page size:
+        1. ReviewQueue items (paginated)
+        2. Deals batch (IN query)
+        3. PSRs (selectinload, 1 IN query)
+        """
+        queue_stmt = (
+            select(ReviewQueue)
+            .join(Deal, Deal.id == ReviewQueue.entity_id)
+            .where(
+                ReviewQueue.entity_type == ReviewType.DEAL_VALIDATION,
+                ReviewQueue.status == ReviewStatus.PENDING,
+                Deal.status == DealStatus.PENDING_REVIEW,
+            )
+            .order_by(ReviewQueue.priority.asc(), ReviewQueue.created_at.asc())
+            # Fetch one extra to determine has_more without a separate COUNT query.
+            .limit(limit + 1)
+            .offset(offset)
+        )
+        review_items = db.scalars(queue_stmt).all()
+        has_more = len(review_items) > limit
+        review_items = review_items[:limit]
+
+        if not review_items:
+            return ReviewQueuePage(items=[], total=offset, has_more=False)
+
+        deal_ids = [item.entity_id for item in review_items]
+        deals_stmt = (
+            select(Deal)
+            .where(Deal.id.in_(deal_ids))
+            .options(selectinload(Deal.product_source_record))
+        )
+        deals_by_id = {deal.id: deal for deal in db.scalars(deals_stmt).all()}
+
+        items = []
+        for item in review_items:
+            deal = deals_by_id.get(item.entity_id)
+            if deal is None:
+                continue
+            items.append(self._to_list_item_record(item, deal))
+
+        return ReviewQueuePage(items=items, total=offset + len(items), has_more=has_more)
+
+    def _to_list_item_record(self, item: ReviewQueue, deal: Deal) -> ReviewQueueListItemRecord:
+        metadata = deal.metadata_json or {}
+        psr = deal.product_source_record
+        return ReviewQueueListItemRecord(
             id=item.id,
-            status=item.status.value,
-            reason=item.reason,
             priority=item.priority,
             created_at=item.created_at,
-            resolved_at=item.resolved_at,
-            deal=self._to_record(deal),
+            deal_id=deal.id,
+            title=deal.title,
+            currency=deal.currency,
+            current_price=deal.current_price,
+            previous_price=deal.previous_price,
+            savings_amount=deal.savings_amount,
+            savings_percent=deal.savings_percent,
+            deal_url=deal.deal_url,
+            source_id=deal.source_id,
+            source_category=psr.source_category if psr is not None else None,
+            image_url=psr.image_url if psr is not None else None,
+            quality_score=metadata.get("quality_score"),
+            business_score=metadata.get("business_score"),
+            promotable=metadata.get("promotable", False),
+            fake_discount=metadata.get("fake_discount", False),
+            confidence_level=metadata.get("confidence_level"),
+            quality_reasons=metadata.get("quality_reasons") or [],
+            price_history=metadata.get("price_aggregation"),
+            asin=self._extract_asin(deal),
         )
 
 

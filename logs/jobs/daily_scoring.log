@@ -1,3 +1,9 @@
 2026-04-14 07:40:13,640 INFO jobs.daily_scoring daily_scoring_complete deals=0 scored=0 skipped=0 failed=0
 2026-04-14 07:40:29,721 INFO jobs.daily_scoring daily_scoring_complete deals=0 scored=0 skipped=0 failed=0
 2026-04-14 07:42:16,235 INFO jobs.daily_scoring daily_scoring_complete deals=0 scored=0 skipped=0 failed=0
+2026-04-14 18:34:24,130 INFO jobs.daily_scoring daily_scoring_starting deal_count=32
+2026-04-14 18:34:34,789 INFO jobs.daily_scoring daily_scoring_complete deals=32 scored=32 skipped=0 failed=0
+2026-04-14 18:35:38,699 INFO jobs.daily_scoring daily_scoring_starting deal_count=32
+2026-04-14 18:35:49,628 INFO jobs.daily_scoring daily_scoring_complete deals=32 scored=32 skipped=0 failed=0
+2026-04-14 18:41:41,440 INFO jobs.daily_scoring daily_scoring_starting deal_count=91
+2026-04-14 18:42:12,359 INFO jobs.daily_scoring daily_scoring_complete deals=91 scored=91 skipped=0 failed=0

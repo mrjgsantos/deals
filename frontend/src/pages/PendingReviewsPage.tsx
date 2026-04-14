@@ -1,194 +1,448 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, getApiErrorMessage } from "../lib/api";
-import type { ReviewItem } from "../types";
+import type { Deal, ReviewQueueItem, ReviewQueuePage } from "../types";
 import { DealSummary } from "../components/DealSummary";
-import { StatusMessage } from "../components/StatusMessage";
-import { formatDateTime, formatMoney, formatPercent, toSentenceCase, toTimestamp } from "../lib/format";
-import { Badge } from "../components/Badge";
-import {
-  getHistoryStrengthTone,
-  getHistorySupportSummary,
-  getPublicationReadiness,
-  getQualityScore,
-  getSavingsPercentValue,
-  hasFakeDiscountRisk,
-  hasWeakHistory,
-  getSourceLabel,
-  getSourceLinkType,
-  getSourceSearchText,
-  isLowConfidenceDeal,
-} from "../lib/dealSignals";
+import { formatMoney, formatPercent, formatRelativeTime, normalizePercentValue } from "../lib/format";
+import { getSourceLabel, getSourceLinkType } from "../lib/dealSignals";
 
-type ActionState = {
-  reviewId: string;
-  action: "approve" | "reject";
-} | null;
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-type ReviewSort = "priority" | "score" | "savings" | "newest";
-type ReviewFocus = "all" | "high_score" | "needs_attention" | "weak_history" | "fake_discount";
+type ActionState = { reviewId: string; action: "approve" | "reject" } | null;
+type SortBy = "priority" | "score" | "savings" | "newest";
+type Focus = "all" | "high_score" | "needs_attention" | "fake_discount";
+
+function getSavingsPercent(item: ReviewQueueItem): number {
+  return normalizePercentValue(item.savings_percent) ?? 0;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getErrorMessage(error: unknown): string {
-  return getApiErrorMessage(error, "Something went wrong while talking to the API.", {
+  return getApiErrorMessage(error, "Something went wrong.", {
     404: "The review item no longer exists.",
-    409: "This review was already resolved or the deal is no longer in a valid pending state.",
+    409: "This review was already resolved or the deal is in an invalid state.",
   });
 }
 
-function matchesReviewFocus(item: ReviewItem, focus: ReviewFocus): boolean {
-  if (focus === "all") {
-    return true;
-  }
-  if (focus === "high_score") {
-    return getQualityScore(item.deal) >= 65;
-  }
-  if (focus === "weak_history") {
-    return hasWeakHistory(item.deal);
-  }
-  if (focus === "fake_discount") {
-    return hasFakeDiscountRisk(item.deal);
-  }
+function sourceLabel(item: ReviewQueueItem): string {
+  if (item.asin) return "Amazon";
+  const label = getSourceLabel(item.deal_url);
+  return label ?? item.source_category ?? "Unknown";
+}
+
+function isAmazon(item: ReviewQueueItem): boolean {
+  return Boolean(item.asin);
+}
+
+function itemMatchesFocus(item: ReviewQueueItem, focus: Focus): boolean {
+  if (focus === "all") return true;
+  if (focus === "high_score") return (item.quality_score ?? 0) >= 65;
+  if (focus === "fake_discount") return item.fake_discount;
+  // needs_attention
   return (
-    isLowConfidenceDeal(item.deal) ||
-    hasWeakHistory(item.deal) ||
-    hasFakeDiscountRisk(item.deal) ||
-    getQualityScore(item.deal) < 65
+    item.fake_discount ||
+    item.confidence_level === "low" ||
+    (item.quality_score !== null && item.quality_score < 50) ||
+    item.quality_reasons.some((r) =>
+      ["limited_price_history", "weak_discount_support", "limited_discount_support"].includes(r),
+    )
   );
 }
 
-function getDecisionFeedbackMessage(action: "approve" | "reject", dealStatus: string): string {
-  const formattedStatus = toSentenceCase(dealStatus);
-  if (action === "approve") {
-    return `Review approved. Deal is now ${formattedStatus}.`;
-  }
-  return `Review rejected. Deal is now ${formattedStatus}.`;
+// ─── Price History Bar ────────────────────────────────────────────────────────
+
+function PriceBar({ item }: { item: ReviewQueueItem }) {
+  const ph = item.price_history;
+  const current = parseFloat(item.current_price);
+  if (!ph || Number.isNaN(current)) return null;
+
+  const min = ph.all_time_min ? parseFloat(ph.all_time_min) : null;
+  const avg90 = ph.avg_90d ? parseFloat(ph.avg_90d) : null;
+  const max90 = ph.max_90d ? parseFloat(ph.max_90d) : null;
+
+  if (min === null && avg90 === null) return null;
+
+  const lo = min ?? current * 0.8;
+  const hi = max90 ?? (avg90 ? avg90 * 1.2 : current * 1.2);
+  const range = hi - lo;
+  if (range <= 0) return null;
+
+  const pos = Math.max(0, Math.min(1, (current - lo) / range));
+  const avgPos = avg90 !== null ? Math.max(0, Math.min(1, (avg90 - lo) / range)) : null;
+
+  const isBelowAvg = avg90 !== null && current < avg90 * 0.95;
+  const isAboveAvg = avg90 !== null && current > avg90 * 1.05;
+  const dotColor = isBelowAvg ? "#1d6b43" : isAboveAvg ? "#9f2f2f" : "#9a5b08";
+
+  return (
+    <div className="price-bar-wrap">
+      <div className="price-bar-track">
+        {avgPos !== null && (
+          <div className="price-bar-avg-line" style={{ left: `${avgPos * 100}%` }} title={`90d avg: ${formatMoney(ph.avg_90d, item.currency)}`} />
+        )}
+        <div className="price-bar-dot" style={{ left: `${pos * 100}%`, background: dotColor }} />
+      </div>
+      <div className="price-bar-labels">
+        {min !== null && <span>{formatMoney(ph.all_time_min, item.currency)}</span>}
+        {avg90 !== null && <span className="price-bar-avg-label">avg 90d {formatMoney(ph.avg_90d, item.currency)}</span>}
+        {max90 !== null && <span>{formatMoney(ph.max_90d, item.currency)}</span>}
+      </div>
+    </div>
+  );
 }
 
+// ─── Queue Card ───────────────────────────────────────────────────────────────
+
+function QueueCard({
+  item,
+  isBusy,
+  onApprove,
+  onReject,
+  onDetail,
+}: {
+  item: ReviewQueueItem;
+  isBusy: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+  onDetail: () => void;
+}) {
+  const src = sourceLabel(item);
+  const amazon = isAmazon(item);
+  const linkType = getSourceLinkType(item.deal_url);
+  const score = item.quality_score;
+  const hasDiscount = item.savings_percent !== null && parseFloat(item.savings_percent ?? "0") > 0;
+  const highScore = score !== null && score >= 70;
+  const lowScore = score !== null && score < 50;
+
+  return (
+    <article className={`qcard${isBusy ? " qcard-busy" : ""}`}>
+      {/* ── Header ── */}
+      <div className="qcard-header">
+        <div className="qcard-thumb">
+          {item.image_url ? (
+            <img src={item.image_url} alt="" loading="lazy" />
+          ) : (
+            <div className="qcard-thumb-placeholder" />
+          )}
+        </div>
+        <div className="qcard-header-body">
+          <div className="qcard-meta-row">
+            <span className={`qcard-source-badge${amazon ? " qcard-source-amazon" : " qcard-source-google"}`}>
+              {amazon ? "Amazon" : src}
+            </span>
+            {score !== null && (
+              <span className={`qcard-score${highScore ? " qcard-score-high" : lowScore ? " qcard-score-low" : ""}`}>
+                Q{score}
+              </span>
+            )}
+            {item.promotable && <span className="qcard-promotable">✓ promotable</span>}
+          </div>
+          <h3 className="qcard-title">{item.title}</h3>
+        </div>
+      </div>
+
+      {/* ── Pricing ── */}
+      <div className="qcard-price-row">
+        <span className="qcard-price-current">{formatMoney(item.current_price, item.currency)}</span>
+        {item.previous_price && (
+          <span className="qcard-price-was">was {formatMoney(item.previous_price, item.currency)}</span>
+        )}
+        {hasDiscount && (
+          <span className="qcard-discount-pill">{formatPercent(item.savings_percent)} off</span>
+        )}
+      </div>
+
+      {/* ── Price History Bar ── */}
+      <PriceBar item={item} />
+
+      {/* ── Flags ── */}
+      <div className="qcard-flags">
+        {item.fake_discount && <span className="qcard-flag qcard-flag-danger">fake discount risk</span>}
+        {item.confidence_level === "low" && <span className="qcard-flag qcard-flag-warn">low confidence</span>}
+        {item.confidence_level === "medium" && <span className="qcard-flag qcard-flag-warn">medium confidence</span>}
+        {linkType === "google_redirect" && <span className="qcard-flag qcard-flag-warn">google redirect</span>}
+        {item.price_history && item.price_history.observation_count_all_time < 4 && (
+          <span className="qcard-flag qcard-flag-warn">sparse history ({item.price_history.observation_count_all_time} obs)</span>
+        )}
+      </div>
+
+      {/* ── Footer ── */}
+      <div className="qcard-footer">
+        <span className="qcard-age">{formatRelativeTime(item.created_at)}</span>
+        <div className="qcard-actions">
+          <button
+            className="qcard-btn-reject"
+            onClick={onReject}
+            disabled={isBusy}
+            title="Reject this deal"
+          >
+            {isBusy ? "…" : "Reject"}
+          </button>
+          <button
+            className="qcard-btn-detail"
+            onClick={onDetail}
+            disabled={isBusy}
+            title="Open full deal detail"
+          >
+            Detail
+          </button>
+          <button
+            className="qcard-btn-approve"
+            onClick={onApprove}
+            disabled={isBusy}
+            title="Approve this deal"
+          >
+            {isBusy ? "…" : "Approve"}
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+function QueueSkeleton() {
+  return (
+    <div className="qgrid">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="qcard qcard-skeleton">
+          <div className="qcard-header">
+            <div className="qcard-thumb"><div className="qcard-thumb-placeholder" /></div>
+            <div className="qcard-header-body">
+              <div className="skeleton-block skeleton-badge" style={{ width: 80, height: 20, borderRadius: 999 }} />
+              <div className="skeleton-block skeleton-title" style={{ marginTop: 8 }} />
+              <div className="skeleton-block skeleton-title skeleton-title-short" style={{ marginTop: 6 }} />
+            </div>
+          </div>
+          <div className="skeleton-block skeleton-price" style={{ marginTop: 14 }} />
+          <div className="skeleton-block" style={{ height: 24, borderRadius: 6, marginTop: 10 }} />
+          <div className="skeleton-block skeleton-button" style={{ marginTop: 14, width: "100%", borderRadius: 8 }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Detail Drawer ────────────────────────────────────────────────────────────
+
+function DetailDrawer({
+  reviewId,
+  deal,
+  isLoading,
+  isBusy,
+  onClose,
+  onApprove,
+  onReject,
+}: {
+  reviewId: string;
+  deal: Deal | null;
+  isLoading: boolean;
+  isBusy: boolean;
+  onClose: () => void;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <>
+      <div className="drawer-overlay" onClick={onClose} />
+      <div className="drawer" ref={drawerRef}>
+        <div className="drawer-toolbar">
+          <button className="drawer-close" onClick={onClose} aria-label="Close">✕</button>
+          <div className="drawer-actions">
+            <button className="secondary-button danger-button" onClick={onReject} disabled={isBusy}>
+              {isBusy ? "Rejecting…" : "Reject"}
+            </button>
+            <button className="primary-button" onClick={onApprove} disabled={isBusy}>
+              {isBusy ? "Approving…" : "Approve"}
+            </button>
+          </div>
+        </div>
+        <div className="drawer-body">
+          {isLoading && <div className="drawer-loading">Loading deal details…</div>}
+          {!isLoading && deal && <DealSummary deal={deal} />}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+const LIMIT = 50;
+
 export function PendingReviewsPage() {
-  const [items, setItems] = useState<ReviewItem[]>([]);
-  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
+  const [pages, setPages] = useState<ReviewQueuePage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [actionState, setActionState] = useState<ActionState>(null);
-  const [sortBy, setSortBy] = useState<ReviewSort>("priority");
-  const [focus, setFocus] = useState<ReviewFocus>("all");
+  const [sortBy, setSortBy] = useState<SortBy>("priority");
+  const [focus, setFocus] = useState<Focus>("all");
   const [filterText, setFilterText] = useState("");
+  const [detailReviewId, setDetailReviewId] = useState<string | null>(null);
+  const [detailDeal, setDetailDeal] = useState<Deal | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
-  async function loadPendingReviews() {
-    setIsLoading(true);
-    setError(null);
+  const allItems = useMemo(() => pages.flatMap((p) => p.items), [pages]);
+  const offset = allItems.length;
 
+  async function load(replace = false) {
     try {
-      const data = await api.getPendingReviews();
-      setItems(data);
-      setSelectedReviewId((current) => current ?? data[0]?.id ?? null);
-    } catch (loadError) {
-      setError(getErrorMessage(loadError));
+      const page = await api.getReviewQueue(replace ? 0 : 0, LIMIT);
+      setPages([page]);
+      setHasMore(page.has_more);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
+
+  async function loadMore() {
+    setIsLoadingMore(true);
+    try {
+      const page = await api.getReviewQueue(offset, LIMIT);
+      setPages((prev) => [...prev, page]);
+      setHasMore(page.has_more);
+    } catch (err) {
+      setFeedback({ tone: "error", message: getErrorMessage(err) });
     } finally {
-      setIsLoading(false);
+      setIsLoadingMore(false);
     }
   }
 
   useEffect(() => {
-    void loadPendingReviews();
+    setIsLoading(true);
+    load(true).finally(() => setIsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const queueSummary = useMemo(
-    () => ({
-      highScore: items.filter((item) => getQualityScore(item.deal) >= 65).length,
-      needsAttention: items.filter((item) => matchesReviewFocus(item, "needs_attention")).length,
-      fakeDiscount: items.filter((item) => hasFakeDiscountRisk(item.deal)).length,
-      weakHistory: items.filter((item) => hasWeakHistory(item.deal)).length,
-    }),
-    [items],
-  );
-
   const visibleItems = useMemo(() => {
-    const normalizedFilter = filterText.trim().toLowerCase();
-    const filtered = items.filter((item) => {
-      if (!matchesReviewFocus(item, focus)) {
-        return false;
-      }
-      if (normalizedFilter.length === 0) {
-        return true;
-      }
-      return getSourceSearchText(item.deal).includes(normalizedFilter);
+    const normalized = filterText.trim().toLowerCase();
+    const filtered = allItems.filter((item) => {
+      if (!itemMatchesFocus(item, focus)) return false;
+      if (!normalized) return true;
+      return (
+        item.title.toLowerCase().includes(normalized) ||
+        (item.source_category ?? "").toLowerCase().includes(normalized) ||
+        (item.asin ?? "").toLowerCase().includes(normalized)
+      );
     });
 
-    return [...filtered].sort((left, right) => {
-      if (sortBy === "score") {
-        return getQualityScore(right.deal) - getQualityScore(left.deal);
-      }
-      if (sortBy === "savings") {
-        return getSavingsPercentValue(right.deal) - getSavingsPercentValue(left.deal);
-      }
-      if (sortBy === "newest") {
-        return (toTimestamp(right.created_at) ?? 0) - (toTimestamp(left.created_at) ?? 0);
-      }
-
-      return left.priority - right.priority || (toTimestamp(left.created_at) ?? 0) - (toTimestamp(right.created_at) ?? 0);
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "score") return (b.quality_score ?? 0) - (a.quality_score ?? 0);
+      if (sortBy === "savings") return getSavingsPercent(b) - getSavingsPercent(a);
+      if (sortBy === "newest") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      return a.priority - b.priority || new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
-  }, [filterText, focus, items, sortBy]);
+  }, [allItems, focus, filterText, sortBy]);
 
-  const selectedItem = useMemo(
-    () => visibleItems.find((item) => item.id === selectedReviewId) ?? visibleItems[0] ?? null,
-    [selectedReviewId, visibleItems],
-  );
+  const queueSummary = useMemo(() => ({
+    total: allItems.length,
+    highScore: allItems.filter((i) => (i.quality_score ?? 0) >= 65).length,
+    needsAttention: allItems.filter((i) => itemMatchesFocus(i, "needs_attention")).length,
+    fakeDiscount: allItems.filter((i) => i.fake_discount).length,
+    amazon: allItems.filter((i) => Boolean(i.asin)).length,
+  }), [allItems]);
 
-  useEffect(() => {
-    if (selectedItem && selectedItem.id !== selectedReviewId) {
-      setSelectedReviewId(selectedItem.id);
-    }
-  }, [selectedItem, selectedReviewId]);
-
-  async function handleDecision(reviewId: string, action: "approve" | "reject") {
+  async function handleDecision(reviewId: string, dealId: string, action: "approve" | "reject") {
     setActionState({ reviewId, action });
     setFeedback(null);
-
     try {
       const decision = action === "approve" ? await api.approveReview(reviewId) : await api.rejectReview(reviewId);
-
-      const nextItems = items.filter((item) => item.id !== reviewId);
-      setItems(nextItems);
-      setSelectedReviewId(nextItems[0]?.id ?? null);
+      setPages((prev) => prev.map((p) => ({ ...p, items: p.items.filter((i) => i.id !== reviewId) })));
+      if (detailReviewId === reviewId) setDetailReviewId(null);
       setFeedback({
         tone: "success",
-        message: getDecisionFeedbackMessage(action, decision.deal_status),
+        message: action === "approve"
+          ? `Approved — deal is now ${decision.deal_status}.`
+          : `Rejected — deal is now ${decision.deal_status}.`,
       });
-    } catch (actionError) {
-      setFeedback({
-        tone: "error",
-        message: getErrorMessage(actionError),
-      });
-      await loadPendingReviews();
+    } catch (err) {
+      setFeedback({ tone: "error", message: getErrorMessage(err) });
     } finally {
       setActionState(null);
     }
   }
 
+  const openDetail = useCallback(async (reviewId: string, dealId: string) => {
+    setDetailReviewId(reviewId);
+    setDetailDeal(null);
+    setIsLoadingDetail(true);
+    try {
+      const deal = await api.getDeal(dealId);
+      setDetailDeal(deal);
+    } catch {
+      // Detail failed to load; drawer shows error state
+    } finally {
+      setIsLoadingDetail(false);
+    }
+  }, []);
+
+  const closeDetail = useCallback(() => {
+    setDetailReviewId(null);
+    setDetailDeal(null);
+  }, []);
+
   if (isLoading) {
-    return <StatusMessage tone="info" title="Loading pending reviews" detail="Fetching the review queue from the API." />;
+    return (
+      <div className="screen-layout">
+        <div className="screen-header">
+          <div>
+            <div className="eyebrow">Review queue</div>
+            <h1>Pending Reviews</h1>
+          </div>
+        </div>
+        <QueueSkeleton />
+      </div>
+    );
   }
 
   if (error) {
-    return <StatusMessage tone="error" title="Could not load pending reviews" detail={error} />;
+    return (
+      <div className="screen-layout">
+        <div className="screen-header">
+          <div>
+            <div className="eyebrow">Review queue</div>
+            <h1>Pending Reviews</h1>
+          </div>
+        </div>
+        <div className="qerror">{error}</div>
+      </div>
+    );
   }
 
   return (
     <div className="screen-layout">
+      {/* ── Header ── */}
       <div className="screen-header">
         <div>
           <div className="eyebrow">Review queue</div>
           <h1>Pending Reviews</h1>
-          <p className="screen-subtitle">Approve or reject generated deals with full scoring context.</p>
         </div>
         <div className="header-meta header-meta-stack">
-          <div className="counter-row"><span className="counter">{items.length} pending</span>{visibleItems.length !== items.length ? <span className="counter">{visibleItems.length} shown</span> : null}</div>
+          <div className="qstats-row">
+            <span className="qstat">{queueSummary.total} pending</span>
+            {queueSummary.amazon > 0 && <span className="qstat qstat-amazon">{queueSummary.amazon} Amazon</span>}
+            {queueSummary.fakeDiscount > 0 && <span className="qstat qstat-danger">{queueSummary.fakeDiscount} fake discount risk</span>}
+            {queueSummary.highScore > 0 && <span className="qstat qstat-success">{queueSummary.highScore} score 65+</span>}
+          </div>
           <div className="filter-row">
             <label className="filter-control">
               <span>Sort</span>
-              <select value={sortBy} onChange={(event) => setSortBy(event.target.value as ReviewSort)}>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortBy)}>
                 <option value="priority">Priority</option>
                 <option value="score">Score</option>
                 <option value="savings">Savings %</option>
@@ -197,11 +451,10 @@ export function PendingReviewsPage() {
             </label>
             <label className="filter-control">
               <span>Focus</span>
-              <select value={focus} onChange={(event) => setFocus(event.target.value as ReviewFocus)}>
-                <option value="all">All reviews</option>
+              <select value={focus} onChange={(e) => setFocus(e.target.value as Focus)}>
+                <option value="all">All</option>
                 <option value="high_score">Score 65+</option>
                 <option value="needs_attention">Needs attention</option>
-                <option value="weak_history">Weak history</option>
                 <option value="fake_discount">Fake discount risk</option>
               </select>
             </label>
@@ -210,129 +463,75 @@ export function PendingReviewsPage() {
               <input
                 type="text"
                 value={filterText}
-                onChange={(event) => setFilterText(event.target.value)}
-                placeholder="Title, source, merchant"
+                onChange={(e) => setFilterText(e.target.value)}
+                placeholder="Title, category, ASIN"
               />
             </label>
-            <button className="secondary-button" onClick={() => void loadPendingReviews()}>
+            <button className="secondary-button" onClick={() => { setIsLoading(true); load(true).finally(() => setIsLoading(false)); }}>
               Refresh
             </button>
           </div>
         </div>
       </div>
 
-      <div className="summary-card-grid">
-        <div className="summary-card">
-          <span className="summary-card-kicker">Score 65+</span>
-          <strong className="summary-card-value">{queueSummary.highScore}</strong>
-          <span className="summary-card-note">Higher-scoring deals to sanity check first.</span>
+      {/* ── Feedback ── */}
+      {feedback && (
+        <div className={`qfeedback qfeedback-${feedback.tone}`} onClick={() => setFeedback(null)}>
+          {feedback.message}
         </div>
-        <div className="summary-card">
-          <span className="summary-card-kicker">Needs attention</span>
-          <strong className="summary-card-value">{queueSummary.needsAttention}</strong>
-          <span className="summary-card-note">Low confidence, weak history, or fake-discount risk.</span>
-        </div>
-        <div className="summary-card">
-          <span className="summary-card-kicker">Fake discount risk</span>
-          <strong className="summary-card-value">{queueSummary.fakeDiscount}</strong>
-          <span className="summary-card-note">Check baseline and recent history before approving.</span>
-        </div>
-        <div className="summary-card">
-          <span className="summary-card-kicker">Weak history</span>
-          <strong className="summary-card-value">{queueSummary.weakHistory}</strong>
-          <span className="summary-card-note">Savings may be unsupported by enough observations.</span>
-        </div>
-      </div>
+      )}
 
-      {feedback ? <StatusMessage tone={feedback.tone} title={feedback.message} /> : null}
-
-      {items.length === 0 ? (
-        <div className="empty-state-shell">
-          <StatusMessage tone="info" title="No pending reviews" detail="The queue is currently clear." />
+      {/* ── Empty state ── */}
+      {visibleItems.length === 0 && allItems.length === 0 && (
+        <div className="qempty">
+          <strong>Queue is clear</strong>
+          <span>No pending reviews right now.</span>
         </div>
-      ) : (
-        <div className="review-layout">
-          <aside className="review-list">
-            {visibleItems.map((item) => {
-              const isBusy = actionState?.reviewId === item.id;
-              const isSelected = item.id === selectedItem?.id;
-              const sourceLabel = getSourceLabel(item.deal.deal_url);
-              const sourceLinkType = getSourceLinkType(item.deal.deal_url);
-              const lowConfidence = isLowConfidenceDeal(item.deal);
-              const publicationState = getPublicationReadiness(item.deal);
-              const historySupport = getHistorySupportSummary(item.deal);
-              const historyTone = getHistoryStrengthTone(item.deal);
+      )}
 
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={isSelected ? "review-list-item review-list-item-active" : "review-list-item"}
-                  onClick={() => setSelectedReviewId(item.id)}
-                  disabled={Boolean(actionState)}
-                >
-                  <div className="review-list-top">
-                    <Badge value={item.status} />
-                    <span className="review-priority">P{item.priority}</span>
-                  </div>
-                  <div className="review-list-title">{item.deal.title}</div>
-                  <div className="review-list-signal-row">
-                    <span className="price-strong">{formatMoney(item.deal.current_price, item.deal.currency)}</span>
-                    <span className="muted">vs {formatMoney(item.deal.previous_price, item.deal.currency)}</span>
-                    <span className="score-chip">Q{item.deal.score_breakdown.quality_score ?? "—"}</span>
-                    <span className="score-chip">{formatPercent(item.deal.savings_percent)}</span>
-                  </div>
-                  <div className="review-list-signal-row review-list-signal-row-secondary">
-                    <span className="muted">Save {formatMoney(item.deal.savings_amount, item.deal.currency)}</span>
-                    <Badge value={historySupport} tone={historyTone} />
-                  </div>
-                  <div className="badge-cluster badge-cluster-wrap">
-                    <Badge value={publicationState.label} tone={publicationState.tone} />
-                    {lowConfidence ? <Badge value="possible low confidence" tone="warning" /> : null}
-                    {item.deal.score_breakdown.fake_discount ? <Badge value="fake discount risk" tone="danger" /> : null}
-                    {sourceLinkType === "google_redirect" ? <Badge value="google redirect" tone="warning" /> : null}
-                  </div>
-                  <div className="review-list-meta">
-                    <span>{formatDateTime(item.created_at)}</span>
-                    <span>{sourceLabel ?? item.reason}</span>
-                    {isBusy ? <span className="muted">Updating…</span> : null}
-                  </div>
-                </button>
-              );
-            })}
-          </aside>
-
-          {selectedItem ? (
-            <section className="review-detail">
-              <div className="review-detail-toolbar">
-                <div className="toolbar-meta">
-                  <Badge value={selectedItem.status} />
-                  <span>Created {formatDateTime(selectedItem.created_at)}</span>
-                  <span>Quality {selectedItem.deal.score_breakdown.quality_score ?? "—"}</span>
-                  <span>{formatPercent(selectedItem.deal.savings_percent)} off</span>
-                </div>
-                <div className="toolbar-actions">
-                  <button
-                    className="secondary-button danger-button"
-                    onClick={() => void handleDecision(selectedItem.id, "reject")}
-                    disabled={Boolean(actionState)}
-                  >
-                    {actionState?.reviewId === selectedItem.id && actionState.action === "reject" ? "Rejecting…" : "Reject"}
-                  </button>
-                  <button
-                    className="primary-button"
-                    onClick={() => void handleDecision(selectedItem.id, "approve")}
-                    disabled={Boolean(actionState)}
-                  >
-                    {actionState?.reviewId === selectedItem.id && actionState.action === "approve" ? "Approving…" : "Approve"}
-                  </button>
-                </div>
-              </div>
-
-              <DealSummary deal={selectedItem.deal} />
-            </section>
-          ) : null}
+      {visibleItems.length === 0 && allItems.length > 0 && (
+        <div className="qempty">
+          <strong>No matches</strong>
+          <span>Try adjusting the filter or focus.</span>
         </div>
+      )}
+
+      {/* ── Card Grid ── */}
+      {visibleItems.length > 0 && (
+        <div className="qgrid">
+          {visibleItems.map((item) => (
+            <QueueCard
+              key={item.id}
+              item={item}
+              isBusy={actionState?.reviewId === item.id}
+              onApprove={() => void handleDecision(item.id, item.deal_id, "approve")}
+              onReject={() => void handleDecision(item.id, item.deal_id, "reject")}
+              onDetail={() => void openDetail(item.id, item.deal_id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ── Load More ── */}
+      {hasMore && (
+        <div className="qload-more">
+          <button className="secondary-button" onClick={() => void loadMore()} disabled={isLoadingMore}>
+            {isLoadingMore ? "Loading…" : "Load more"}
+          </button>
+        </div>
+      )}
+
+      {/* ── Detail Drawer ── */}
+      {detailReviewId && (
+        <DetailDrawer
+          reviewId={detailReviewId}
+          deal={detailDeal}
+          isLoading={isLoadingDetail}
+          isBusy={actionState?.reviewId === detailReviewId}
+          onClose={closeDetail}
+          onApprove={() => void handleDecision(detailReviewId, detailDeal?.id ?? "", "approve")}
+          onReject={() => void handleDecision(detailReviewId, detailDeal?.id ?? "", "reject")}
+        />
       )}
     </div>
   );

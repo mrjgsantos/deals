@@ -52,6 +52,18 @@ export function toSentenceCase(value: string): string {
   return value.replaceAll("_", " ");
 }
 
+export function formatRelativeTime(value: string | null | undefined): string {
+  const timestamp = toTimestamp(value);
+  if (timestamp == null) return "—";
+  const diffMs = Date.now() - timestamp;
+  const diffMins = Math.floor(diffMs / 60_000);
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
 export function normalizePercentValue(value: string | number | null | undefined): number | null {
   if (value == null) {
     return null;

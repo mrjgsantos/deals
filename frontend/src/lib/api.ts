@@ -7,6 +7,7 @@ import type {
   PublishedDealsPage,
   ReviewDecision,
   ReviewItem,
+  ReviewQueuePage,
   SavedDealItem,
   TrackedProductsResponse,
   UserPreferences,
@@ -23,6 +24,7 @@ import {
   parsePublishedDealsPage,
   parsePublishedDeals,
   parseReviewDecision,
+  parseReviewQueuePage,
   parseSavedDealItems,
   parseTrackedProductsResponse,
   parseUserPreferences,
@@ -343,6 +345,10 @@ export const api = {
   },
   getPublishedDeal(id: string) {
     return request<PublishedDeal>(`/api/v1/published-deals/${id}`, parsePublishedDeal, { allowAnonymousFallback: true });
+  },
+  getReviewQueue(offset = 0, limit = 50) {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    return request<ReviewQueuePage>(`/api/v1/review/queue?${params.toString()}`, parseReviewQueuePage);
   },
   getPendingReviews() {
     return request<ReviewItem[]>("/api/v1/review/pending", parsePendingReviews);

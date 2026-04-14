@@ -10,6 +10,8 @@ import type {
   PublishedDealsPage,
   ReviewDecision,
   ReviewItem,
+  ReviewQueueItem,
+  ReviewQueuePage,
   SavedDealItem,
   TrackedProductItem,
   TrackedProductsResponse,
@@ -161,6 +163,43 @@ export function parsePublishedDealsPage(value: unknown): PublishedDealsPage {
 
 export function parsePendingReviews(value: unknown): ReviewItem[] {
   return expectArray(value, "pending_reviews").map((item) => normalizeReviewItem(item));
+}
+
+export function parseReviewQueuePage(value: unknown): ReviewQueuePage {
+  const record = expectRecord(value, "review_queue_page");
+  return {
+    items: Array.isArray(record.items) ? record.items.map((item) => normalizeReviewQueueItem(item)) : [],
+    total: readNumberWithDefault(record, "total"),
+    has_more: readBooleanWithDefault(record, "has_more"),
+  };
+}
+
+function normalizeReviewQueueItem(value: unknown): ReviewQueueItem {
+  const record = expectRecord(value, "review_queue_item");
+  return {
+    id: readRequiredString(record, "id", "review_queue_item"),
+    priority: readRequiredNumber(record, "priority", "review_queue_item"),
+    created_at: readRequiredString(record, "created_at", "review_queue_item"),
+    deal_id: readRequiredString(record, "deal_id", "review_queue_item"),
+    title: readRequiredString(record, "title", "review_queue_item"),
+    currency: readRequiredString(record, "currency", "review_queue_item"),
+    current_price: readRequiredDecimalLike(record, "current_price", "review_queue_item"),
+    previous_price: readDecimalLike(record, "previous_price"),
+    savings_amount: readDecimalLike(record, "savings_amount"),
+    savings_percent: readDecimalLike(record, "savings_percent"),
+    deal_url: readOptionalString(record, "deal_url"),
+    source_id: readRequiredString(record, "source_id", "review_queue_item"),
+    source_category: readOptionalString(record, "source_category"),
+    image_url: readOptionalString(record, "image_url"),
+    quality_score: readOptionalNumber(record, "quality_score"),
+    business_score: readOptionalNumber(record, "business_score"),
+    promotable: readBooleanWithDefault(record, "promotable"),
+    fake_discount: readBooleanWithDefault(record, "fake_discount"),
+    confidence_level: readOptionalString(record, "confidence_level"),
+    quality_reasons: readStringArray(record, "quality_reasons"),
+    price_history: normalizePriceHistory(record.price_history),
+    asin: readOptionalString(record, "asin"),
+  };
 }
 
 export function parseDeals(value: unknown): Deal[] {
