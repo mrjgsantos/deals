@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python:*)",
-      "Bash(.venv312/bin/python:*)"
+      "Bash(.venv312/bin/python:*)",
+      "Bash(grep -rn '`/api/v1' /Users/jorgesantos/Documents/GitHub/Deals/frontend/src/ --include=\"*.ts\" --include=\"*.tsx\")"
     ]
   }
 }

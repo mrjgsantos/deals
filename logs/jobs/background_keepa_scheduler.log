@@ -3299,3 +3299,4 @@
 2026-04-14 08:40:56,426 INFO jobs.background_keepa_scheduler background_keepa_scheduler_stopped
 2026-04-14 08:40:57,485 INFO jobs.background_keepa_scheduler background_keepa_scheduler_started interval_seconds=600
 2026-04-14 08:40:58,799 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
+2026-04-14 08:50:59,100 INFO jobs.background_keepa_scheduler background_keepa_refresh_skipped reason=missing_keepa_source
