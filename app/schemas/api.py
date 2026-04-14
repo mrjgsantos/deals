@@ -424,6 +424,40 @@ class TrackedProductsResponse(BaseModel):
     items: list[TrackedProductItemResponse] = Field(default_factory=list)
 
 
+class DealsListItemResponse(BaseModel):
+    """Lightweight response for the deals exploration card view."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    title: str
+    status: str
+    currency: str
+    current_price: Decimal
+    previous_price: Decimal | None = None
+    savings_amount: Decimal | None = None
+    savings_percent: Decimal | None = None
+    deal_url: str | None = None
+    detected_at: datetime
+    source_id: UUID
+    source_category: str | None = None
+    image_url: str | None = None
+    quality_score: int | None = None
+    business_score: int | None = None
+    promotable: bool = False
+    fake_discount: bool = False
+    confidence_level: str | None = None
+    quality_reasons: list[str] = Field(default_factory=list)
+    price_history: DealPriceHistoryResponse | None = None
+    asin: str | None = None
+
+
+class DealsListPageResponse(BaseModel):
+    items: list[DealsListItemResponse] = Field(default_factory=list)
+    total: int = 0
+    has_more: bool = False
+
+
 class ReviewDecisionResponse(BaseModel):
     review_id: UUID
     review_status: str

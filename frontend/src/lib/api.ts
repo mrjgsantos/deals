@@ -2,6 +2,7 @@ import type {
   AuthToken,
   AuthUser,
   Deal,
+  DealsListPage,
   NewDealsResponse,
   PublishedDeal,
   PublishedDealsPage,
@@ -18,6 +19,7 @@ import {
   parseAuthUser,
   parseDeal,
   parseDeals,
+  parseDealsListPage,
   parseNewDealsResponse,
   parsePendingReviews,
   parsePublishedDeal,
@@ -352,6 +354,29 @@ export const api = {
   },
   getPendingReviews() {
     return request<ReviewItem[]>("/api/v1/review/pending", parsePendingReviews);
+  },
+  getDealsListPage(
+    filters: {
+      status?: string;
+      source?: string;
+      minScore?: number;
+      minSavings?: number;
+      sinceDays?: number;
+      fakeDiscountOnly?: boolean;
+      sortBy?: string;
+    } = {},
+    offset = 0,
+    limit = 50,
+  ) {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (filters.status) params.set("status", filters.status);
+    if (filters.source) params.set("source", filters.source);
+    if (filters.minScore != null) params.set("min_score", String(filters.minScore));
+    if (filters.minSavings != null) params.set("min_savings", String(filters.minSavings));
+    if (filters.sinceDays != null) params.set("since_days", String(filters.sinceDays));
+    if (filters.fakeDiscountOnly) params.set("fake_discount_only", "true");
+    if (filters.sortBy) params.set("sort_by", filters.sortBy);
+    return request<DealsListPage>(`/api/v1/deals/list?${params.toString()}`, parseDealsListPage);
   },
   getDeals() {
     return request<Deal[]>("/api/v1/deals", parseDeals);

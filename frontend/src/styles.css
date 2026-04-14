@@ -2036,3 +2036,63 @@ h3 {
     width: 100vw;
   }
 }
+
+/* ─── Deal Status Badges ─────────────────────────────────────────────────── */
+
+.deal-status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+}
+
+.deal-status-pending_review {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.deal-status-approved {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.deal-status-published {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.deal-status-rejected {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* ─── Deals Page Filter Bar ──────────────────────────────────────────────── */
+
+.deals-filter-row {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-control-narrow input {
+  width: 80px;
+}
+
+.filter-control-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-control-inline input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.qfeedback-info {
+  background: #f0f9ff;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}

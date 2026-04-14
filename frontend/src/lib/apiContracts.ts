@@ -3,6 +3,8 @@ import type {
   AuthToken,
   AuthUser,
   Deal,
+  DealsListItem,
+  DealsListPage,
   NewDealsResponse,
   DealPriceHistory,
   DealScoreBreakdown,
@@ -189,6 +191,42 @@ function normalizeReviewQueueItem(value: unknown): ReviewQueueItem {
     savings_percent: readDecimalLike(record, "savings_percent"),
     deal_url: readOptionalString(record, "deal_url"),
     source_id: readRequiredString(record, "source_id", "review_queue_item"),
+    source_category: readOptionalString(record, "source_category"),
+    image_url: readOptionalString(record, "image_url"),
+    quality_score: readOptionalNumber(record, "quality_score"),
+    business_score: readOptionalNumber(record, "business_score"),
+    promotable: readBooleanWithDefault(record, "promotable"),
+    fake_discount: readBooleanWithDefault(record, "fake_discount"),
+    confidence_level: readOptionalString(record, "confidence_level"),
+    quality_reasons: readStringArray(record, "quality_reasons"),
+    price_history: normalizePriceHistory(record.price_history),
+    asin: readOptionalString(record, "asin"),
+  };
+}
+
+export function parseDealsListPage(value: unknown): DealsListPage {
+  const record = expectRecord(value, "deals_list_page");
+  return {
+    items: Array.isArray(record.items) ? record.items.map((item) => normalizeDealsListItem(item)) : [],
+    total: readNumberWithDefault(record, "total"),
+    has_more: readBooleanWithDefault(record, "has_more"),
+  };
+}
+
+function normalizeDealsListItem(value: unknown): DealsListItem {
+  const record = expectRecord(value, "deals_list_item");
+  return {
+    id: readRequiredString(record, "id", "deals_list_item"),
+    title: readRequiredString(record, "title", "deals_list_item"),
+    status: readRequiredString(record, "status", "deals_list_item"),
+    currency: readRequiredString(record, "currency", "deals_list_item"),
+    current_price: readRequiredDecimalLike(record, "current_price", "deals_list_item"),
+    previous_price: readDecimalLike(record, "previous_price"),
+    savings_amount: readDecimalLike(record, "savings_amount"),
+    savings_percent: readDecimalLike(record, "savings_percent"),
+    deal_url: readOptionalString(record, "deal_url"),
+    detected_at: readRequiredString(record, "detected_at", "deals_list_item"),
+    source_id: readRequiredString(record, "source_id", "deals_list_item"),
     source_category: readOptionalString(record, "source_category"),
     image_url: readOptionalString(record, "image_url"),
     quality_score: readOptionalNumber(record, "quality_score"),

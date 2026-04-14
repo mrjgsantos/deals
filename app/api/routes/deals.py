@@ -17,8 +17,16 @@ from app.api.dependencies import (
 from app.db.models import User
 from app.db.enums import DealStatus
 from app.db.session import get_db
-from app.schemas.api import DealClickResponse, DealPublicationResponse, DealResponse, SavedDealMutationResponse
-from app.services.deal_service import DealPublicationService, DealQueryService
+from app.schemas.api import (
+    DealsListItemResponse,
+    DealsListPageResponse,
+    DealClickResponse,
+    DealPriceHistoryResponse,
+    DealPublicationResponse,
+    DealResponse,
+    SavedDealMutationResponse,
+)
+from app.services.deal_service import DealsListItemRecord, DealPublicationService, DealQueryService
 from app.services.personalization import PersonalizationService
 from app.services.product_analytics_service import (
     EVENT_DEAL_CLICK,
@@ -40,6 +48,88 @@ def list_deals(
 ) -> list[DealResponse]:
     deals = service.list_deals(db, status=status)
     return [DealResponse.model_validate(deal) for deal in deals]
+
+
+@router.get("/list", response_model=DealsListPageResponse)
+def list_deals_page(
+    status: DealStatus | None = Query(default=None),
+    source: str | None = Query(default=None, pattern="^(amazon|google)$"),
+    min_score: int | None = Query(default=None, ge=0, le=100),
+    min_savings: float | None = Query(default=None, ge=0, le=100),
+    since_days: int | None = Query(default=None, ge=1, le=365),
+    fake_discount_only: bool = Query(default=False),
+    sort_by: str = Query(default="newest", pattern="^(newest|score|savings)$"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    service: DealQueryService = Depends(get_deal_query_service),
+) -> DealsListPageResponse:
+    page = service.list_deals_page(
+        db,
+        status=status,
+        source=source,
+        min_score=min_score,
+        min_savings=min_savings,
+        since_days=since_days,
+        fake_discount_only=fake_discount_only,
+        sort_by=sort_by,
+        limit=limit,
+        offset=offset,
+    )
+    return DealsListPageResponse(
+        items=[_to_deals_list_item_response(item) for item in page.items],
+        total=page.total,
+        has_more=page.has_more,
+    )
+
+
+def _to_deals_list_item_response(item: DealsListItemRecord) -> DealsListItemResponse:
+    ph = item.price_history
+    price_history_resp: DealPriceHistoryResponse | None = None
+    if ph and isinstance(ph, dict):
+        price_history_resp = DealPriceHistoryResponse(
+            avg_30d=_to_decimal(ph.get("avg_30d")),
+            avg_90d=_to_decimal(ph.get("avg_90d")),
+            min_90d=_to_decimal(ph.get("min_90d")),
+            max_90d=_to_decimal(ph.get("max_90d")),
+            all_time_min=_to_decimal(ph.get("all_time_min")),
+            days_at_current_price=ph.get("days_at_current_price"),
+            observation_count_30d=int(ph.get("observation_count_30d") or 0),
+            observation_count_90d=int(ph.get("observation_count_90d") or 0),
+            observation_count_all_time=int(ph.get("observation_count_all_time") or 0),
+        )
+    return DealsListItemResponse(
+        id=item.id,
+        title=item.title,
+        status=item.status,
+        currency=item.currency,
+        current_price=item.current_price,
+        previous_price=item.previous_price,
+        savings_amount=item.savings_amount,
+        savings_percent=item.savings_percent,
+        deal_url=item.deal_url,
+        detected_at=item.detected_at,
+        source_id=item.source_id,
+        source_category=item.source_category,
+        image_url=item.image_url,
+        quality_score=item.quality_score,
+        business_score=item.business_score,
+        promotable=item.promotable,
+        fake_discount=item.fake_discount,
+        confidence_level=item.confidence_level,
+        quality_reasons=item.quality_reasons,
+        price_history=price_history_resp,
+        asin=item.asin,
+    )
+
+
+def _to_decimal(value: object) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
 
 
 @router.get("/{deal_id}", response_model=DealResponse)
