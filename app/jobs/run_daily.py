@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 
 from app.jobs.daily_ai_drafts import main as ai_main
+from app.jobs.daily_amazon_discovery import main as amazon_discovery_main
 from app.jobs.daily_auto_publish import main as auto_publish_main
 from app.jobs.daily_ingestion import main as ingestion_main
 from app.jobs.daily_scoring import main as scoring_main
@@ -16,6 +17,13 @@ def main(argv: list[str] | None = None) -> int:
     def _runner(logger):
         logger.info("starting daily job sequence")
         step_results: list[tuple[str, int]] = []
+        # Amazon discovery must run before ingestion and scoring so that newly
+        # discovered ASINs (with Keepa history) are available when deals are
+        # scored.  Without this ordering guarantee, a manual or concurrent
+        # trigger of the two workflows can cause scoring to run before
+        # discovery finishes, producing an incomplete deal set.
+        if args.include_amazon_discovery:
+            step_results.append(("amazon_discovery", amazon_discovery_main()))
         if args.include_ingestion:
             step_results.append(("ingestion", ingestion_main([])))
         step_results.append(("stats_recompute", stats_main()))
@@ -32,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser()
+    parser.add_argument("--include-amazon-discovery", action="store_true")
     parser.add_argument("--include-ingestion", action="store_true")
     return parser.parse_args(argv)
 

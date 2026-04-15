@@ -43,5 +43,5 @@ jobs:
       - name: Run database migrations
         run: python -m alembic upgrade head
 
-      - name: Run daily pipeline (with ingestion)
-        run: python -m app.jobs.run_daily --include-ingestion
+      - name: Run daily pipeline (with Amazon discovery + ingestion)
+        run: python -m app.jobs.run_daily --include-amazon-discovery --include-ingestion
