@@ -127,6 +127,12 @@ def get_current_user(
         ) from exc
 
 
+def get_staff_user(current_user: User = Depends(get_current_user)) -> User:
+    if not current_user.is_staff:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="staff_required")
+    return current_user
+
+
 def get_optional_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),

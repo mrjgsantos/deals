@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import (
-    get_current_user,
+    get_staff_user,
     get_metrics_service,
     get_product_analytics_service,
     get_tracked_product_operations_service,
@@ -23,7 +23,7 @@ from app.services.metrics_service import MetricsService
 from app.services.product_analytics_service import ProductAnalyticsService
 from app.services.tracked_product_service import TrackedProductOperationsService
 
-router = APIRouter(prefix="/metrics", dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/metrics", dependencies=[Depends(get_staff_user)])
 
 
 @router.get("/overview", response_model=MetricsOverviewResponse)

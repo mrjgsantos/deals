@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_current_user, get_deal_query_service, get_review_service
+from app.api.dependencies import get_staff_user, get_deal_query_service, get_review_service
 from app.db.session import get_db
 from app.schemas.api import (
     DealPriceHistoryResponse,
@@ -18,7 +18,7 @@ from app.schemas.api import (
 from app.services.deal_service import DealQueryService, ReviewQueueListItemRecord
 from app.services.review_service import ReviewService
 
-router = APIRouter(prefix="/review", dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/review", dependencies=[Depends(get_staff_user)])
 
 
 @router.get("/queue", response_model=ReviewQueuePageResponse)

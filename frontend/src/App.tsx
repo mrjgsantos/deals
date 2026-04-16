@@ -12,6 +12,7 @@ import {
   subscribeToAuthExpired,
 } from "./lib/api";
 import { AuthPage } from "./pages/AuthPage";
+import { LegalPage } from "./pages/LegalPage";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { NewDealsPage } from "./pages/NewDealsPage";
 import { PreferencesOnboardingPage } from "./pages/PreferencesOnboardingPage";
@@ -27,6 +28,8 @@ type AppRoute =
   | { kind: "auth" }
   | { kind: "reset-password"; token: string }
   | { kind: "verify-email"; token: string }
+  | { kind: "terms" }
+  | { kind: "privacy" }
   | { kind: "saved" }
   | { kind: "new" }
   | { kind: "onboarding" };
@@ -78,6 +81,9 @@ function parseRoute(pathname: string): AppRoute {
     const token = new URLSearchParams(window.location.search).get("token") ?? "";
     return { kind: "verify-email", token };
   }
+
+  if (pathname === "/terms") return { kind: "terms" };
+  if (pathname === "/privacy") return { kind: "privacy" };
 
   if (pathname === "/saved") {
     return { kind: "saved" };
@@ -511,6 +517,22 @@ export function App() {
         />
       );
     }
+    if (!authState.user.is_staff) {
+      return (
+        <div className="auth-shell">
+          <div className="auth-card" style={{ textAlign: "center" }}>
+            <div className="auth-eyebrow">Access denied</div>
+            <h1 className="auth-title" style={{ marginBottom: 12 }}>Not authorised</h1>
+            <p className="auth-copy" style={{ marginBottom: 24 }}>
+              Your account doesn't have access to the internal console.
+            </p>
+            <button className="auth-submit" onClick={() => navigate("/")}>
+              Back to deals
+            </button>
+          </div>
+        </div>
+      );
+    }
     return <InternalConsole currentUser={authState.user} onLogout={handleLogout} />;
   }
 
@@ -526,6 +548,14 @@ export function App() {
 
   if (route.kind === "verify-email") {
     return <VerifyEmailPage token={route.token} onDone={() => navigate("/")} />;
+  }
+
+  if (route.kind === "terms") {
+    return <LegalPage page="terms" onBack={() => window.history.back()} />;
+  }
+
+  if (route.kind === "privacy") {
+    return <LegalPage page="privacy" onBack={() => window.history.back()} />;
   }
 
   if (route.kind === "auth") {

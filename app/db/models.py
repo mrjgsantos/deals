@@ -133,6 +133,7 @@ class User(UUIDPrimaryKeyMixin, Base):
     google_sub: Mapped[str | None] = mapped_column(String(255))
     display_name: Mapped[str | None] = mapped_column(String(255))
     avatar_url: Mapped[str | None] = mapped_column(String(1000))
+    is_staff: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_seen_deals_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

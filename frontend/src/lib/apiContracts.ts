@@ -443,6 +443,7 @@ function normalizeAuthUser(value: unknown): AuthUser {
     email: readRequiredString(record, "email", "auth_user"),
     display_name: readOptionalString(record, "display_name"),
     avatar_url: readOptionalString(record, "avatar_url"),
+    is_staff: Boolean(record["is_staff"]),
     email_verified: Boolean(record["email_verified"]),
     created_at: readRequiredString(record, "created_at", "auth_user"),
   };

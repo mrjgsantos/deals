@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import (
     get_current_user,
+    get_staff_user,
     get_deal_publication_service,
     get_deal_query_service,
     get_personalization_service,
@@ -37,7 +38,7 @@ from app.services.product_analytics_service import (
 )
 from app.services.saved_deals_service import SavedDealsService
 
-router = APIRouter(prefix="/deals", dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/deals", dependencies=[Depends(get_staff_user)])
 
 
 @router.get("", response_model=list[DealResponse])

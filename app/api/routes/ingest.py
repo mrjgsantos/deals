@@ -5,12 +5,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_ingestion_service
+from app.api.dependencies import get_ingestion_service, get_staff_user
 from app.db.session import get_db
 from app.ingestion.exceptions import PayloadValidationError, SourceNotFoundError
 from app.schemas.api import IngestRunRequest, IngestRunResponse
 
-router = APIRouter(prefix="/ingest")
+router = APIRouter(prefix="/ingest", dependencies=[Depends(get_staff_user)])
 logger = logging.getLogger(__name__)
 
 

@@ -91,6 +91,7 @@ class AuthUserResponse(BaseModel):
     email: str
     display_name: str | None = None
     avatar_url: str | None = None
+    is_staff: bool = False
     email_verified: bool = False
     created_at: datetime
 
