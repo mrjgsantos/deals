@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from app.api.dependencies import get_staff_user
 from app.db.session import get_db
 from app.ingestion.exceptions import PayloadValidationError, SourceNotFoundError
 from app.ingestion.schemas import IngestionBatchResult, IngestionRecordResult
 from app.main import app
+
+
+def override_staff_user():
+    return type("StaffUser", (), {"is_staff": True, "email_verified_at": None})()
 
 
 def override_db():
@@ -53,6 +58,7 @@ def test_ingest_run_returns_200_with_serialized_success_body(monkeypatch) -> Non
         ),
     )
     app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_staff_user] = override_staff_user
     client = TestClient(app)
 
     response = client.post(
@@ -91,6 +97,7 @@ def test_ingest_run_returns_404_for_missing_source(monkeypatch) -> None:
         lambda parser_name: FakeIngestionService(error=SourceNotFoundError("missing")),
     )
     app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_staff_user] = override_staff_user
     client = TestClient(app)
 
     response = client.post(
@@ -109,6 +116,7 @@ def test_ingest_run_returns_400_for_payload_validation_error(monkeypatch) -> Non
         lambda parser_name: FakeIngestionService(error=PayloadValidationError("parser returned too many records")),
     )
     app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_staff_user] = override_staff_user
     client = TestClient(app)
 
     response = client.post(
@@ -123,6 +131,7 @@ def test_ingest_run_returns_400_for_payload_validation_error(monkeypatch) -> Non
 
 def test_ingest_run_rejects_oversized_list_payload() -> None:
     app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_staff_user] = override_staff_user
     client = TestClient(app)
 
     response = client.post(
@@ -140,6 +149,7 @@ def test_ingest_run_rejects_oversized_list_payload() -> None:
 
 def test_ingest_run_returns_400_for_unsupported_parser() -> None:
     app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_staff_user] = override_staff_user
     client = TestClient(app)
 
     response = client.post(
@@ -162,6 +172,7 @@ def test_ingest_run_returns_500_for_unhandled_error(monkeypatch) -> None:
         lambda parser_name: FakeIngestionService(error=RuntimeError("boom")),
     )
     app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_staff_user] = override_staff_user
     client = TestClient(app)
 
     response = client.post(

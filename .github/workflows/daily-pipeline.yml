@@ -39,7 +39,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # 👇 ESTE É O FIX CRÍTICO
       - name: Run database migrations
         run: python -m alembic upgrade head
 

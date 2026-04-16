@@ -38,10 +38,10 @@ class DealRecord:
     source_category: str | None
     subcategories: list[str]
     asin: str | None
-    image_url: str | None
-    personalization_score: float | None
     score_breakdown: dict[str, Any]
     ai_copy_draft: dict[str, Any] | None
+    image_url: str | None = None
+    personalization_score: float | None = None
 
 
 @dataclass(slots=True)

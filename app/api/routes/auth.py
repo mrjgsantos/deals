@@ -1,6 +1,6 @@
-from __future__ import annotations
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
@@ -31,7 +31,7 @@ _limiter = Limiter(key_func=get_remote_address)
 @_limiter.limit("10/minute")
 def register(
     request: Request,
-    body: AuthCredentialsRequest,
+    body: Annotated[AuthCredentialsRequest, Body()],
     db: Session = Depends(get_db),
     service: AuthService = Depends(get_auth_service),
     analytics: ProductAnalyticsService = Depends(get_product_analytics_service),
@@ -68,7 +68,7 @@ def register(
 @_limiter.limit("20/minute")
 def login(
     request: Request,
-    body: AuthCredentialsRequest,
+    body: Annotated[AuthCredentialsRequest, Body()],
     db: Session = Depends(get_db),
     service: AuthService = Depends(get_auth_service),
 ) -> AuthTokenResponse:
@@ -127,7 +127,7 @@ def google_login(
 @_limiter.limit("5/minute")
 def forgot_password(
     request: Request,
-    body: ForgotPasswordRequest,
+    body: Annotated[ForgotPasswordRequest, Body()],
     db: Session = Depends(get_db),
     service: AuthService = Depends(get_auth_service),
 ) -> Response:
@@ -147,7 +147,7 @@ def forgot_password(
 @_limiter.limit("10/minute")
 def reset_password(
     request: Request,
-    body: ResetPasswordRequest,
+    body: Annotated[ResetPasswordRequest, Body()],
     db: Session = Depends(get_db),
     service: AuthService = Depends(get_auth_service),
 ) -> Response:
@@ -164,7 +164,7 @@ def reset_password(
 @_limiter.limit("10/minute")
 def verify_email(
     request: Request,
-    body: dict,
+    body: Annotated[dict, Body()],
     db: Session = Depends(get_db),
     service: AuthService = Depends(get_auth_service),
 ) -> Response:

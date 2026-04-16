@@ -251,6 +251,8 @@ class FakeAuthService:
                 "display_name": "Reviewer",
                 "avatar_url": None,
                 "created_at": datetime(2026, 4, 10, 9, 0, tzinfo=UTC),
+                "is_staff": True,
+                "email_verified_at": None,
             },
         )()
 
@@ -265,6 +267,9 @@ class FakeAuthService:
             raise ValueError("invalid_credentials")
         self.user.email = email
         return AuthResult(access_token="login-token", token_type="bearer", user=self.user)
+
+    def create_email_verification_token(self, db, *, user_id):
+        return "fake-verification-token"
 
     def login_with_google(self, db, *, identity):
         self.user.email = identity.email
@@ -438,6 +443,8 @@ def override_authenticated_user():
             "display_name": "Reviewer",
             "avatar_url": None,
             "created_at": datetime(2026, 4, 10, 9, 0, tzinfo=UTC),
+            "is_staff": True,
+            "email_verified_at": None,
         },
     )()
 
@@ -576,6 +583,8 @@ def test_get_me_returns_authenticated_user() -> None:
             "display_name": "Reviewer",
             "avatar_url": None,
             "created_at": datetime(2026, 4, 10, 9, 0, tzinfo=UTC),
+            "is_staff": True,
+            "email_verified_at": None,
         },
     )()
     app.dependency_overrides[get_current_user] = lambda: user
@@ -1059,6 +1068,7 @@ def test_get_new_deals_returns_count_and_payload() -> None:
                 "savings_percent": "25.00",
                 "deal_url": "https://example.com/deal",
                 "summary": "Structured summary",
+                "image_url": None,
                 "detected_at": new_deal.detected_at.isoformat().replace("+00:00", "Z"),
                 "published_at": "2026-04-12T08:00:00Z",
                 "category": "Tech",
