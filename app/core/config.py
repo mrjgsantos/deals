@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     serpapi_queries_file: str = "data/serpapi_queries.json"
     serpapi_query_limit: int = 8
 
+    resend_api_key: str | None = None
+    resend_from_email: str = "noreply@deals.app"
+    app_base_url: str = "http://localhost:5173"
+    password_reset_token_expire_minutes: int = 60
+
     keepa_api_key: str | None = None
     keepa_domain_id: int = 1
 

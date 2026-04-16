@@ -587,6 +587,28 @@ a:hover {
   cursor: progress;
 }
 
+.auth-success {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, #22c55e 15%, transparent);
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.auth-link {
+  all: unset;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-muted, #888);
+  text-align: center;
+  padding: 4px 0;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+  color: var(--text);
+}
+
 .preferences-card {
   width: min(560px, 100%);
 }

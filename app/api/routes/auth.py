@@ -1,29 +1,43 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_auth_service, get_current_user, get_google_identity_service, get_product_analytics_service
+from app.core.config import settings
 from app.db.models import User
 from app.db.session import get_db
-from app.schemas.api import AuthCredentialsRequest, AuthTokenResponse, AuthUserResponse, GoogleAuthRequest
+from app.schemas.api import (
+    AuthCredentialsRequest,
+    AuthTokenResponse,
+    AuthUserResponse,
+    ForgotPasswordRequest,
+    GoogleAuthRequest,
+    ResetPasswordRequest,
+)
 from app.services.auth_service import AuthService
+from app.services.email_service import send_password_reset_email
 from app.services.google_identity_service import GoogleIdentityService
 from app.services.product_analytics_service import EVENT_USER_SIGNUP, ProductAnalyticsService
 
 router = APIRouter(prefix="/auth")
+_limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/register", response_model=AuthTokenResponse, status_code=status.HTTP_201_CREATED)
+@_limiter.limit("10/minute")
 def register(
-    request: AuthCredentialsRequest,
+    request: Request,
+    body: AuthCredentialsRequest,
     db: Session = Depends(get_db),
     service: AuthService = Depends(get_auth_service),
     analytics: ProductAnalyticsService = Depends(get_product_analytics_service),
 ) -> AuthTokenResponse:
     try:
-        result = service.register(db, email=request.email, password=request.password)
+        result = service.register(db, email=body.email, password=body.password)
         analytics.record_event(db, user_id=result.user.id, event_type=EVENT_USER_SIGNUP)
         db.commit()
         db.refresh(result.user)
@@ -45,13 +59,15 @@ def register(
 
 
 @router.post("/login", response_model=AuthTokenResponse)
+@_limiter.limit("20/minute")
 def login(
-    request: AuthCredentialsRequest,
+    request: Request,
+    body: AuthCredentialsRequest,
     db: Session = Depends(get_db),
     service: AuthService = Depends(get_auth_service),
 ) -> AuthTokenResponse:
     try:
-        result = service.login(db, email=request.email, password=request.password)
+        result = service.login(db, email=body.email, password=body.password)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
@@ -65,14 +81,15 @@ def login(
 
 @router.post("/google", response_model=AuthTokenResponse)
 def google_login(
-    request: GoogleAuthRequest,
+    request: Request,
+    body: GoogleAuthRequest,
     db: Session = Depends(get_db),
     service: AuthService = Depends(get_auth_service),
     google_service: GoogleIdentityService = Depends(get_google_identity_service),
     analytics: ProductAnalyticsService = Depends(get_product_analytics_service),
 ) -> AuthTokenResponse:
     try:
-        identity = google_service.verify_id_token(request.id_token)
+        identity = google_service.verify_id_token(body.id_token)
         result = service.login_with_google(db, identity=identity)
         if result.is_new_user:
             analytics.record_event(db, user_id=result.user.id, event_type=EVENT_USER_SIGNUP)
@@ -100,6 +117,54 @@ def google_login(
     )
 
 
+@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+@_limiter.limit("5/minute")
+def forgot_password(
+    request: Request,
+    body: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+    service: AuthService = Depends(get_auth_service),
+) -> Response:
+    plain_token = service.request_password_reset(db, email=body.email)
+    if plain_token is not None:
+        reset_url = f"{settings.app_base_url}/reset-password?token={plain_token}"
+        try:
+            send_password_reset_email(to_email=body.email, reset_url=reset_url)
+            db.commit()
+        except Exception:
+            db.rollback()
+    # Always return 204 — don't reveal whether the email exists.
+    return Response(status_code=204)
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+@_limiter.limit("10/minute")
+def reset_password(
+    request: Request,
+    body: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+    service: AuthService = Depends(get_auth_service),
+) -> Response:
+    try:
+        service.reset_password(db, token=body.token, new_password=body.new_password)
+        db.commit()
+        return Response(status_code=204)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/me", response_model=AuthUserResponse)
 def get_me(current_user: User = Depends(get_current_user)) -> AuthUserResponse:
     return AuthUserResponse.model_validate(current_user)
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+def delete_me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    service: AuthService = Depends(get_auth_service),
+) -> Response:
+    service.delete_user(db, user_id=current_user.id)
+    db.commit()
+    return Response(status_code=204)

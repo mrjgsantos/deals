@@ -23,6 +23,7 @@ type AppRoute =
   | { kind: "public-detail"; dealId: string }
   | { kind: "internal" }
   | { kind: "auth" }
+  | { kind: "reset-password"; token: string }
   | { kind: "saved" }
   | { kind: "new" }
   | { kind: "onboarding" };
@@ -63,6 +64,11 @@ function parseRoute(pathname: string): AppRoute {
 
   if (pathname === "/login") {
     return { kind: "auth" };
+  }
+
+  if (pathname === "/reset-password") {
+    const token = new URLSearchParams(window.location.search).get("token") ?? "";
+    return { kind: "reset-password", token };
   }
 
   if (pathname === "/saved") {
@@ -313,7 +319,7 @@ export function App() {
     navigate("/internal");
   }
 
-  function handlePublicAuthenticated(payload: { accessToken: string; user: AuthUser }, mode: "login" | "register") {
+  function handlePublicAuthenticated(payload: { accessToken: string; user: AuthUser }, mode: string) {
     applyAuthenticatedSession(payload);
     if (mode === "register") {
       navigate("/onboarding");
@@ -498,6 +504,16 @@ export function App() {
       );
     }
     return <InternalConsole currentUser={authState.user} onLogout={handleLogout} />;
+  }
+
+  if (route.kind === "reset-password") {
+    return (
+      <AuthPage
+        initialMode="reset"
+        resetToken={route.token}
+        onAuthenticated={handlePublicAuthenticated}
+      />
+    );
   }
 
   if (route.kind === "auth") {

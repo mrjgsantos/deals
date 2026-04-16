@@ -20,8 +20,12 @@ except Exception as exc:
 from contextlib import asynccontextmanager
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.api.router import api_router
 from app.core.config import settings
@@ -46,11 +50,16 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    limiter = Limiter(key_func=get_remote_address)
+
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
         lifespan=lifespan,
     )
+
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # Explicit origins from env (e.g. custom domains).
     # Vercel deployments (*.vercel.app) are always allowed via regex so no

@@ -38,6 +38,40 @@ class AuthCredentialsRequest(BaseModel):
         return value
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if not cleaned or "@" not in cleaned:
+            raise ValueError("email must be valid")
+        return cleaned
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+    @field_validator("token")
+    @classmethod
+    def validate_token(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("token is required")
+        return cleaned
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        if len(value) < 8:
+            raise ValueError("password must be at least 8 characters")
+        if len(value) > 255:
+            raise ValueError("password is too long")
+        return value
+
+
 class GoogleAuthRequest(BaseModel):
     id_token: str
 
