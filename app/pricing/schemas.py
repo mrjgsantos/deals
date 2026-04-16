@@ -42,6 +42,15 @@ class FakeDiscountAnalysis:
 
 
 @dataclass(slots=True)
+class ScoringKeywordConfig:
+    """Keyword lists used during scoring. Defaults to the hard-coded module constants."""
+    high_demand_keywords: tuple[str, ...] | None = None
+    recognized_brands: tuple[str, ...] | None = None
+    low_signal_keywords: tuple[str, ...] | None = None
+    low_signal_categories: tuple[str, ...] | None = None
+
+
+@dataclass(slots=True)
 class DealScoringInput:
     current_price: Decimal
     claimed_old_price: Decimal | None
@@ -54,6 +63,8 @@ class DealScoringInput:
     source_priority: int = 0
     category_priority: int = 0
     source_link_quality: str | None = None
+    keyword_config: ScoringKeywordConfig | None = None
+    days_since_last_promoted: int | None = None
 
 
 @dataclass(slots=True)

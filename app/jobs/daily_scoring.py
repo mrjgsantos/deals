@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -11,6 +13,7 @@ from app.db.models import Deal, PriceObservation, ProductSourceRecord
 from app.jobs.common import job_session, run_job
 from app.pricing.aggregation import aggregate_price_history
 from app.pricing.fake_discount import analyze_fake_discount
+from app.pricing.keyword_config import load_keyword_config
 from app.pricing.schemas import DealScoringInput, PricePoint
 from app.pricing.scoring import classify_source_link_quality, score_deal
 
@@ -25,6 +28,25 @@ def main() -> int:
                 .options(joinedload(Deal.product_source_record))
                 .where(Deal.status.in_([DealStatus.PENDING_REVIEW, DealStatus.APPROVED]))
             ).all()
+
+            keyword_config = load_keyword_config(db)
+
+            # Build a lookup: product_variant_id -> days since most recent published deal.
+            # Used to penalise deals for products promoted very recently.
+            recency_window = now - timedelta(days=14)
+            recent_rows = db.execute(
+                select(Deal.product_variant_id, Deal.published_at)
+                .where(
+                    Deal.published_at.is_not(None),
+                    Deal.published_at >= recency_window,
+                    Deal.product_variant_id.is_not(None),
+                )
+            ).all()
+            days_since_promoted: dict[UUID, int] = {}
+            for pv_id, published_at in recent_rows:
+                delta = int((now - published_at).total_seconds() // 86400)
+                if pv_id not in days_since_promoted or delta < days_since_promoted[pv_id]:
+                    days_since_promoted[pv_id] = delta
 
             scored_count = 0
             skipped_count = 0
@@ -98,6 +120,8 @@ def main() -> int:
                                 source_priority=0,
                                 category_priority=0,
                                 source_link_quality=classify_source_link_quality(deal.deal_url),
+                                keyword_config=keyword_config,
+                                days_since_last_promoted=days_since_promoted.get(deal.product_variant_id),
                             )
                         )
 

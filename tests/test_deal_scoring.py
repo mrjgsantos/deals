@@ -350,11 +350,12 @@ def test_quality_score_rejects_low_signal_commodity() -> None:
     assert "low_signal_commodity" in quality.reasons
 
 
-def test_quality_score_rejects_weak_discount_vs_historical_average() -> None:
+def test_quality_score_penalizes_weak_discount_vs_historical_average() -> None:
+    # Weak discount vs historical average (10%) is a -25 penalty, not a hard kill.
+    # The deal is still not promotable here because the overall score is too low.
     quality = score_deal_quality(
         make_input(
             current_price=Decimal("90.00"),
-            claimed_old_price=Decimal("110.00"),
             aggregation=make_aggregation(
                 current_price=Decimal("90.00"),
                 avg_30d=Decimal("100.00"),
@@ -366,8 +367,28 @@ def test_quality_score_rejects_weak_discount_vs_historical_average() -> None:
     )
 
     assert quality.promotable is False
-    assert quality.score == 0
+    assert 0 < quality.score < 60
     assert "weak_discount_vs_historical_average" in quality.reasons
+
+
+def test_quality_score_rejects_price_above_historical_average() -> None:
+    # Price above historical average is the only remaining hard kill in this path.
+    quality = score_deal_quality(
+        make_input(
+            current_price=Decimal("105.00"),
+            aggregation=make_aggregation(
+                current_price=Decimal("105.00"),
+                avg_30d=Decimal("100.00"),
+                avg_90d=Decimal("102.00"),
+                min_90d=Decimal("85.00"),
+                max_90d=Decimal("110.00"),
+            ),
+        )
+    )
+
+    assert quality.promotable is False
+    assert quality.score == 0
+    assert "price_above_historical_average" in quality.reasons
 
 
 def test_quality_score_penalizes_medium_historical_confidence() -> None:

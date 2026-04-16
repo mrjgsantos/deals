@@ -735,4 +735,25 @@ class AICopyDraft(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+
+class ScoringKeyword(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Configurable keyword lists used by the deal scoring engine.
+
+    list_name values:
+      - 'high_demand'        : category/title keywords that boost score
+      - 'recognized_brand'   : brand keywords that boost score
+      - 'low_signal_keyword' : title keywords that disqualify a deal
+      - 'low_signal_category': source_category values that disqualify a deal
+    """
+
+    __tablename__ = "scoring_keywords"
+    __table_args__ = (
+        UniqueConstraint("list_name", "keyword", name="uq_scoring_keywords_list_keyword"),
+        Index("ix_scoring_keywords_list_name", "list_name"),
+    )
+
+    list_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    keyword: Mapped[str] = mapped_column(String(255), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+
     deal: Mapped[Deal] = relationship(back_populates="ai_copy_drafts")

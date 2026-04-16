@@ -8,6 +8,7 @@ from app.pricing.schemas import (
     DealQualityScore,
     DealScoringInput,
     ScoredDeal,
+    ScoringKeywordConfig,
 )
 
 HIGH_DEMAND_KEYWORDS = (
@@ -83,8 +84,6 @@ LOW_SIGNAL_COMMODITY_CATEGORIES = (
     "pest control",
     "vitamins",
     "supplements",
-    "accessories",
-    "low-value accessories",
 )
 
 
@@ -98,6 +97,7 @@ def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
     reasons: list[str] = []
     normalized_text = _normalized_text(input_data)
     confidence = _observation_confidence_tier(input_data)
+    kw = input_data.keyword_config or ScoringKeywordConfig()
 
     if input_data.fake_discount_analysis.is_fake_discount:
         reasons.append("fake_discount_detected")
@@ -105,44 +105,42 @@ def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
 
     score = 50
     baseline = _best_baseline(input_data)
-    historical_average = _historical_average_baseline(input_data)
     savings_percent: Decimal | None = None
-    high_demand_category = _is_high_demand_category(normalized_text)
-    recognized_brand = _has_recognized_brand(normalized_text)
+    high_demand_category = _is_high_demand_category(normalized_text, kw.high_demand_keywords)
+    recognized_brand = _has_recognized_brand(normalized_text, kw.recognized_brands)
 
     if baseline is not None and baseline > 0:
         savings_percent = ((baseline - input_data.current_price) / baseline) * Decimal("100")
         savings_percent = savings_percent.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        if savings_percent >= Decimal("30"):
-            score += 25
-            reasons.append("strong_discount_vs_baseline")
-        elif savings_percent >= Decimal("15"):
-            score += 15
-            reasons.append("meaningful_discount_vs_baseline")
-        elif savings_percent <= Decimal("0"):
+        if savings_percent < Decimal("0"):
+            # Price is above the weighted historical average — hard kill.
             score -= 30
             reasons.append("no_user_savings_vs_baseline")
+            reasons.append("price_above_historical_average")
+            return DealQualityScore(score=0, promotable=False, confidence_level=confidence, reasons=reasons)
+        elif savings_percent == Decimal("0"):
+            score -= 30
+            reasons.append("no_user_savings_vs_baseline")
+        elif savings_percent < Decimal("15"):
+            score -= 25
+            reasons.append("weak_discount_vs_historical_average")
+        elif savings_percent < Decimal("30"):
+            score += 15
+            reasons.append("meaningful_discount_vs_baseline")
+        else:
+            score += 25
+            reasons.append("strong_discount_vs_baseline")
     else:
         score -= 10
         reasons.append("limited_price_history")
 
-    if historical_average is not None and historical_average > 0:
-        historical_discount = ((historical_average - input_data.current_price) / historical_average) * Decimal("100")
-        historical_discount = historical_discount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        if historical_discount < Decimal("15"):
-            reasons.append("weak_discount_vs_historical_average")
-            if confidence == "high":
-                # Hard kill only when historical data is reliable
-                return DealQualityScore(score=0, promotable=False, confidence_level=confidence, reasons=reasons)
-            else:
-                # Sparse history: penalise but don't discard — the average may not be representative
-                score -= 15
-
     if input_data.current_price < Decimal("15") and not high_demand_category:
-        reasons.append("low_price_low_demand")
-        return DealQualityScore(score=0, promotable=False, confidence_level=confidence, reasons=reasons)
+        absolute_savings = (baseline - input_data.current_price) if baseline is not None else None
+        if absolute_savings is None or absolute_savings < Decimal("10"):
+            reasons.append("low_price_low_demand")
+            return DealQualityScore(score=0, promotable=False, confidence_level=confidence, reasons=reasons)
 
-    if _is_low_signal_commodity(normalized_text):
+    if _is_low_signal_commodity(normalized_text, kw.low_signal_keywords, kw.low_signal_categories):
         reasons.append("low_signal_commodity")
         return DealQualityScore(score=0, promotable=False, confidence_level=confidence, reasons=reasons)
 
@@ -157,17 +155,21 @@ def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
         score -= 10
         reasons.append("low_historical_confidence")
 
-    if input_data.aggregation.all_time_min is not None:
+    if input_data.aggregation.all_time_min is not None and input_data.aggregation.observation_count_all_time >= 10:
         if input_data.current_price <= input_data.aggregation.all_time_min:
             score += 20
             reasons.append("at_all_time_low")
 
-    if input_data.aggregation.days_at_current_price <= 3:
+    if input_data.aggregation.days_at_current_price <= 3 and savings_percent is not None and savings_percent >= Decimal("5"):
         score += 10
         reasons.append("fresh_price_drop")
     elif input_data.aggregation.days_at_current_price > 14:
         score -= 20
         reasons.append("stale_price")
+
+    absolute_savings_adjustment, absolute_savings_reasons = _absolute_savings_adjustment(baseline, input_data.current_price)
+    score += absolute_savings_adjustment
+    reasons.extend(absolute_savings_reasons)
 
     history_support_adjustment, history_support_reasons = _history_support_adjustment(input_data)
     score += history_support_adjustment
@@ -177,9 +179,10 @@ def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
     score += volatility_adjustment
     reasons.extend(volatility_reasons)
 
-    discount_support_adjustment, discount_support_reasons = _discount_support_adjustment(input_data, savings_percent)
-    score += discount_support_adjustment
-    reasons.extend(discount_support_reasons)
+    if confidence == "high":
+        discount_support_adjustment, discount_support_reasons = _discount_support_adjustment(input_data, savings_percent)
+        score += discount_support_adjustment
+        reasons.extend(discount_support_reasons)
 
     category_boost, category_reasons = _quality_category_adjustment(
         high_demand_category=high_demand_category,
@@ -187,6 +190,10 @@ def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
     )
     score += category_boost
     reasons.extend(category_reasons)
+
+    if input_data.days_since_last_promoted is not None and input_data.days_since_last_promoted < 14:
+        score -= 15
+        reasons.append("recently_promoted")
 
     score = max(0, min(100, score))
     promotable = score >= 60 and "fake_discount_detected" not in reasons and "no_user_savings_vs_baseline" not in reasons
@@ -244,22 +251,32 @@ def classify_source_link_quality(url: str | None) -> str | None:
 
 
 def _best_baseline(input_data: DealScoringInput) -> Decimal | None:
-    candidates = (
-        input_data.claimed_old_price,
-        input_data.aggregation.avg_30d,
-        input_data.aggregation.avg_90d,
-    )
-    for candidate in candidates:
-        if candidate is not None and candidate > 0:
-            return candidate
+    """Weighted average of available historical windows: 60% avg_30d + 40% avg_90d."""
+    agg = input_data.aggregation
+    has_30d = agg.avg_30d is not None and agg.avg_30d > 0
+    has_90d = agg.avg_90d is not None and agg.avg_90d > 0
+    if has_30d and has_90d:
+        return (agg.avg_30d * Decimal("0.6") + agg.avg_90d * Decimal("0.4")).quantize(  # type: ignore[operator]
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+    if has_30d:
+        return agg.avg_30d
+    if has_90d:
+        return agg.avg_90d
     return None
 
 
-def _historical_average_baseline(input_data: DealScoringInput) -> Decimal | None:
-    for candidate in (input_data.aggregation.avg_30d, input_data.aggregation.avg_90d):
-        if candidate is not None and candidate > 0:
-            return candidate
-    return None
+def _absolute_savings_adjustment(baseline: Decimal | None, current_price: Decimal) -> tuple[int, list[str]]:
+    if baseline is None or baseline <= 0:
+        return 0, []
+    absolute_savings = baseline - current_price
+    if absolute_savings >= Decimal("100"):
+        return 10, ["high_absolute_savings"]
+    if absolute_savings >= Decimal("30"):
+        return 5, ["meaningful_absolute_savings"]
+    if absolute_savings < Decimal("5"):
+        return -10, ["negligible_absolute_savings"]
+    return 0, []
 
 
 def _history_support_adjustment(input_data: DealScoringInput) -> tuple[int, list[str]]:
@@ -318,17 +335,23 @@ def _normalized_text(input_data: DealScoringInput) -> str:
     return " ".join(part.strip().casefold() for part in parts if part and part.strip())
 
 
-def _is_high_demand_category(normalized_text: str) -> bool:
-    return any(keyword in normalized_text for keyword in HIGH_DEMAND_KEYWORDS)
+def _is_high_demand_category(normalized_text: str, override: tuple[str, ...] | None = None) -> bool:
+    return any(keyword in normalized_text for keyword in (override if override is not None else HIGH_DEMAND_KEYWORDS))
 
 
-def _has_recognized_brand(normalized_text: str) -> bool:
-    return any(keyword in normalized_text for keyword in HIGH_RECOGNITION_BRANDS)
+def _has_recognized_brand(normalized_text: str, override: tuple[str, ...] | None = None) -> bool:
+    return any(keyword in normalized_text for keyword in (override if override is not None else HIGH_RECOGNITION_BRANDS))
 
 
-def _is_low_signal_commodity(normalized_text: str) -> bool:
-    return any(keyword in normalized_text for keyword in LOW_SIGNAL_COMMODITY_KEYWORDS) or any(
-        keyword in normalized_text for keyword in LOW_SIGNAL_COMMODITY_CATEGORIES
+def _is_low_signal_commodity(
+    normalized_text: str,
+    keyword_override: tuple[str, ...] | None = None,
+    category_override: tuple[str, ...] | None = None,
+) -> bool:
+    keywords = keyword_override if keyword_override is not None else LOW_SIGNAL_COMMODITY_KEYWORDS
+    categories = category_override if category_override is not None else LOW_SIGNAL_COMMODITY_CATEGORIES
+    return any(keyword in normalized_text for keyword in keywords) or any(
+        keyword in normalized_text for keyword in categories
     )
 
 
