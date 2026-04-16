@@ -232,6 +232,15 @@ export const api = {
       body: JSON.stringify({ id_token: idToken }),
     });
   },
+  verifyEmail(token: string) {
+    return fetchJson("/api/v1/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }).then(() => undefined);
+  },
+  resendVerification() {
+    return fetchJson("/api/v1/auth/resend-verification", { method: "POST" }).then(() => undefined);
+  },
   forgotPassword(email: string) {
     return fetchJson("/api/v1/auth/forgot-password", {
       method: "POST",

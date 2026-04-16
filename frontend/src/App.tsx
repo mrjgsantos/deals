@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { EmailVerificationBanner } from "./components/EmailVerificationBanner";
 import { InternalConsole } from "./components/InternalConsole";
 import {
   ApiError,
@@ -11,6 +12,7 @@ import {
   subscribeToAuthExpired,
 } from "./lib/api";
 import { AuthPage } from "./pages/AuthPage";
+import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { NewDealsPage } from "./pages/NewDealsPage";
 import { PreferencesOnboardingPage } from "./pages/PreferencesOnboardingPage";
 import { PublicDealDetailPage } from "./pages/PublicDealDetailPage";
@@ -24,6 +26,7 @@ type AppRoute =
   | { kind: "internal" }
   | { kind: "auth" }
   | { kind: "reset-password"; token: string }
+  | { kind: "verify-email"; token: string }
   | { kind: "saved" }
   | { kind: "new" }
   | { kind: "onboarding" };
@@ -69,6 +72,11 @@ function parseRoute(pathname: string): AppRoute {
   if (pathname === "/reset-password") {
     const token = new URLSearchParams(window.location.search).get("token") ?? "";
     return { kind: "reset-password", token };
+  }
+
+  if (pathname === "/verify-email") {
+    const token = new URLSearchParams(window.location.search).get("token") ?? "";
+    return { kind: "verify-email", token };
   }
 
   if (pathname === "/saved") {
@@ -516,6 +524,10 @@ export function App() {
     );
   }
 
+  if (route.kind === "verify-email") {
+    return <VerifyEmailPage token={route.token} onDone={() => navigate("/")} />;
+  }
+
   if (route.kind === "auth") {
     if (authState.status === "authenticated") {
       if (!preferencesLoading && !hasInitializedProfile(preferences)) {
@@ -797,6 +809,10 @@ export function App() {
           )}
         </nav>
       </header>
+
+      {authState.status === "authenticated" && !authState.user.email_verified ? (
+        <EmailVerificationBanner email={authState.user.email} />
+      ) : null}
 
       <main className="public-main">
         {route.kind === "public-feed" ? (

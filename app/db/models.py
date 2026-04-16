@@ -133,6 +133,7 @@ class User(UUIDPrimaryKeyMixin, Base):
     google_sub: Mapped[str | None] = mapped_column(String(255))
     display_name: Mapped[str | None] = mapped_column(String(255))
     avatar_url: Mapped[str | None] = mapped_column(String(1000))
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_seen_deals_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -757,6 +758,23 @@ class ScoringKeyword(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     list_name: Mapped[str] = mapped_column(String(64), nullable=False)
     keyword: Mapped[str] = mapped_column(String(255), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+
+
+class EmailVerificationToken(UUIDPrimaryKeyMixin, Base):
+    """Single-use tokens for verifying a user's email address."""
+
+    __tablename__ = "email_verification_tokens"
+    __table_args__ = (Index("ix_email_verification_tokens_token_hash", "token_hash"),)
+
+    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    user: Mapped[User] = relationship()
 
 
 class PasswordResetToken(UUIDPrimaryKeyMixin, Base):

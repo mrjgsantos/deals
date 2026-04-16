@@ -91,7 +91,14 @@ class AuthUserResponse(BaseModel):
     email: str
     display_name: str | None = None
     avatar_url: str | None = None
+    email_verified: bool = False
     created_at: datetime
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):  # type: ignore[override]
+        instance = super().model_validate(obj, **kwargs)
+        instance.email_verified = getattr(obj, "email_verified_at", None) is not None
+        return instance
 
 
 class AuthTokenResponse(BaseModel):

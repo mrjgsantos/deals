@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import AuthTokenError, create_access_token, decode_access_token, hash_password, verify_password
-from app.db.models import PasswordResetToken, User
+from app.db.models import EmailVerificationToken, PasswordResetToken, User
 from app.services.google_identity_service import GoogleIdentity
+
+EMAIL_VERIFICATION_EXPIRE_HOURS = 24
 
 
 @dataclass(slots=True)
@@ -72,6 +74,31 @@ class AuthService:
         db.add(user)
         db.flush()
         return self._result_for_user(user, is_new_user=True)
+
+    def create_email_verification_token(self, db: Session, *, user_id: UUID) -> str:
+        """Create a new email verification token for the given user. Returns plain token."""
+        plain_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(plain_token.encode()).hexdigest()
+        expires_at = datetime.now(UTC) + timedelta(hours=EMAIL_VERIFICATION_EXPIRE_HOURS)
+        db.add(EmailVerificationToken(user_id=user_id, token_hash=token_hash, expires_at=expires_at))
+        db.flush()
+        return plain_token
+
+    def verify_email(self, db: Session, *, token: str) -> None:
+        """Mark user email as verified. Raises ValueError on invalid/expired token."""
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        record = db.scalar(select(EmailVerificationToken).where(EmailVerificationToken.token_hash == token_hash))
+
+        if record is None:
+            raise ValueError("invalid_or_expired_token")
+        if record.used_at is not None:
+            raise ValueError("invalid_or_expired_token")
+        if datetime.now(UTC) >= record.expires_at:
+            raise ValueError("invalid_or_expired_token")
+
+        record.used_at = datetime.now(UTC)
+        record.user.email_verified_at = datetime.now(UTC)
+        db.flush()
 
     def request_password_reset(self, db: Session, *, email: str) -> str | None:
         """Create a reset token for the given email. Returns plain token or None if user not found."""

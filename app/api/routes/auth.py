@@ -19,7 +19,7 @@ from app.schemas.api import (
     ResetPasswordRequest,
 )
 from app.services.auth_service import AuthService
-from app.services.email_service import send_password_reset_email
+from app.services.email_service import send_password_reset_email, send_verification_email
 from app.services.google_identity_service import GoogleIdentityService
 from app.services.product_analytics_service import EVENT_USER_SIGNUP, ProductAnalyticsService
 
@@ -39,8 +39,14 @@ def register(
     try:
         result = service.register(db, email=body.email, password=body.password)
         analytics.record_event(db, user_id=result.user.id, event_type=EVENT_USER_SIGNUP)
+        plain_token = service.create_email_verification_token(db, user_id=result.user.id)
         db.commit()
         db.refresh(result.user)
+        verify_url = f"{settings.app_base_url}/verify-email?token={plain_token}"
+        try:
+            send_verification_email(to_email=result.user.email, verify_url=verify_url)
+        except Exception:
+            pass  # Don't fail registration if email sending fails
     except ValueError as exc:
         db.rollback()
         if str(exc) == "email_already_registered":
@@ -152,6 +158,46 @@ def reset_password(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/verify-email", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+@_limiter.limit("10/minute")
+def verify_email(
+    request: Request,
+    body: dict,
+    db: Session = Depends(get_db),
+    service: AuthService = Depends(get_auth_service),
+) -> Response:
+    token = str(body.get("token", "")).strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="token_required")
+    try:
+        service.verify_email(db, token=token)
+        db.commit()
+        return Response(status_code=204)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/resend-verification", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+@_limiter.limit("3/minute")
+def resend_verification(
+    request: Request,
+    db: Session = Depends(get_db),
+    service: AuthService = Depends(get_auth_service),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    if current_user.email_verified_at is not None:
+        return Response(status_code=204)
+    plain_token = service.create_email_verification_token(db, user_id=current_user.id)
+    db.commit()
+    verify_url = f"{settings.app_base_url}/verify-email?token={plain_token}"
+    try:
+        send_verification_email(to_email=current_user.email, verify_url=verify_url)
+    except Exception:
+        pass
+    return Response(status_code=204)
 
 
 @router.get("/me", response_model=AuthUserResponse)
