@@ -1,28 +1,10 @@
-from sqlalchemy.engine import make_url
-from app.core.config import settings
-
-try:
-    parsed = make_url(settings.database_url)
-    print(
-        "DB DEBUG PARSED",
-        {
-            "drivername": parsed.drivername,
-            "username": parsed.username,
-            "host": parsed.host,
-            "port": parsed.port,
-            "database": parsed.database,
-            "query": dict(parsed.query),
-        },
-    )
-except Exception as exc:
-    print("DB DEBUG PARSE ERROR", repr(exc))
-
-from contextlib import asynccontextmanager
 import logging
+import warnings
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import Response
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -36,9 +18,22 @@ from app.jobs.background_keepa_scheduler import (
 
 logger = logging.getLogger(__name__)
 
+_INSECURE_SECRET = "change-me-in-production-auth-secret"
+
+
+def _warn_insecure_config() -> None:
+    if settings.auth_secret_key == _INSECURE_SECRET:
+        warnings.warn(
+            "AUTH_SECRET_KEY is using the default insecure value. "
+            "Set a strong random secret in production.",
+            stacklevel=2,
+        )
+        logger.warning("startup_insecure_auth_secret_key")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _warn_insecure_config()
     scheduler = maybe_start_background_keepa_scheduler()
     if scheduler is not None:
         app.state.background_keepa_scheduler = scheduler
@@ -49,13 +44,25 @@ async def lifespan(app: FastAPI):
         stop_background_keepa_scheduler(scheduler)
 
 
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+
+
 def create_app() -> FastAPI:
     limiter = Limiter(key_func=get_remote_address)
 
+    docs_url = "/docs" if settings.enable_api_docs else None
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
         lifespan=lifespan,
+        docs_url=docs_url,
+        redoc_url=docs_url and "/redoc",
+        openapi_url=docs_url and "/openapi.json",
     )
 
     app.state.limiter = limiter
@@ -72,6 +79,13 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next):
+        response: Response = await call_next(request)
+        for header, value in _SECURITY_HEADERS.items():
+            response.headers[header] = value
+        return response
 
     app.include_router(api_router, prefix=settings.api_v1_prefix)
     return app

@@ -4,7 +4,9 @@ import base64
 import json
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_deal_query_service, get_optional_current_user, get_personalization_service
@@ -16,6 +18,7 @@ from app.services.deal_service import DealQueryService, PublishedDealsPage
 from app.services.personalization import PersonalizationService
 
 router = APIRouter(prefix="/published-deals")
+_limiter = Limiter(key_func=get_remote_address)
 DEFAULT_PUBLISHED_DEALS_PAGE_SIZE = 12
 MAX_PUBLISHED_DEALS_PAGE_SIZE = 50
 
@@ -52,7 +55,9 @@ def _decode_published_deals_cursor(cursor: str) -> tuple[str, UUID]:
 
 
 @router.get("", response_model=list[PublishedDealResponse])
+@_limiter.limit("60/minute")
 def list_published_deals(
+    request: Request,
     db: Session = Depends(get_db),
     service: DealQueryService = Depends(get_deal_query_service),
     current_user: User | None = Depends(get_optional_current_user),
@@ -68,7 +73,9 @@ def list_published_deals(
 
 
 @router.get("/page", response_model=PublishedDealsPageResponse)
+@_limiter.limit("60/minute")
 def list_published_deals_page(
+    request: Request,
     limit: int = Query(default=DEFAULT_PUBLISHED_DEALS_PAGE_SIZE, ge=1, le=MAX_PUBLISHED_DEALS_PAGE_SIZE),
     cursor: str | None = Query(default=None),
     db: Session = Depends(get_db),

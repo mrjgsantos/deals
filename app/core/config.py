@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     app_base_url: str = "http://localhost:5173"
     password_reset_token_expire_minutes: int = 60
 
+    debug: bool = False
+    enable_api_docs: bool = False
+
     keepa_api_key: str | None = None
     keepa_domain_id: int = 1
 
