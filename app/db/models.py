@@ -735,6 +735,8 @@ class AICopyDraft(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    deal: Mapped[Deal] = relationship(back_populates="ai_copy_drafts")
+
 
 class ScoringKeyword(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Configurable keyword lists used by the deal scoring engine.

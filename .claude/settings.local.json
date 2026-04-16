@@ -10,7 +10,9 @@
       "Bash(npx tsc:*)",
       "Bash(docker compose:*)",
       "Bash(PGPASSWORD='SgoncaloSUPABASE2015S!' psql:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(grep -v \"^$\\\\| Container \\\\| Network \")",
+      "Bash(grep -v \"^$\\\\| Container \\\\| Network \\\\|Creating\\\\|Created\\\\|Starting\\\\|Started\")"
     ]
   }
 }
