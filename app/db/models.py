@@ -757,5 +757,3 @@ class ScoringKeyword(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     list_name: Mapped[str] = mapped_column(String(64), nullable=False)
     keyword: Mapped[str] = mapped_column(String(255), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
-
-    deal: Mapped[Deal] = relationship(back_populates="ai_copy_drafts")
