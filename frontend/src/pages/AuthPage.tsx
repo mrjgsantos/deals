@@ -288,6 +288,15 @@ export function AuthPage({
               Back to sign in
             </button>
           ) : null}
+
+          {mode === "register" ? (
+            <p className="auth-terms">
+              By creating an account you agree to our{" "}
+              <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+              {" "}and{" "}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+            </p>
+          ) : null}
         </form>
       </div>
     </div>
