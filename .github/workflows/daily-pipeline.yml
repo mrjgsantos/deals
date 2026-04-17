@@ -2,14 +2,55 @@ name: Daily Pipeline
 
 on:
   schedule:
+    # 06:00 UTC — Amazon discovery (slow, runs once per day)
+    - cron: "0 6 * * *"
+    # 08:00–22:00 UTC hourly — SerpApi ingestion + scoring + auto-publish + AI drafts
     - cron: "0 8-22 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      include_discovery:
+        description: "Include Amazon discovery (default: false)"
+        required: false
+        default: "false"
 
 jobs:
-  run-daily:
-    name: Run daily ingestion + scoring + auto-publish + AI drafts
+  discovery:
+    name: Amazon.es ASIN discovery + Keepa ingest
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # Run only at 06:00 UTC or when manually requested
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.include_discovery == 'true' || github.event_name == 'schedule' && startsWith(github.event.schedule, '0 6')
+
+    env:
+      POSTGRES_SERVER: ${{ secrets.POSTGRES_SERVER }}
+      POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      KEEPA_API_KEY: ${{ secrets.KEEPA_API_KEY }}
+      AUTH_SECRET_KEY: ${{ secrets.AUTH_SECRET_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - run: python -m alembic upgrade head
+
+      - name: Discover Amazon.es ASINs and ingest via Keepa
+        run: python -m app.jobs.daily_amazon_discovery
+
+  pipeline:
+    name: SerpApi ingestion + scoring + auto-publish + AI drafts
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Run every hour 08:00–22:00 UTC or on manual dispatch without discovery
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.include_discovery != 'true' || github.event_name == 'schedule' && startsWith(github.event.schedule, '0 8-22')
 
     env:
       POSTGRES_SERVER: ${{ secrets.POSTGRES_SERVER }}
@@ -21,26 +62,23 @@ jobs:
       SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
       AUTH_SECRET_KEY: ${{ secrets.AUTH_SECRET_KEY }}
       AI_COPY_MODEL_NAME: ${{ secrets.AI_COPY_MODEL_NAME }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       SERPAPI_ENGINE: ${{ secrets.SERPAPI_ENGINE }}
       SERPAPI_COUNTRY: ${{ secrets.SERPAPI_COUNTRY }}
       SERPAPI_LANGUAGE: ${{ secrets.SERPAPI_LANGUAGE }}
       SERPAPI_LOCATION: ${{ secrets.SERPAPI_LOCATION }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt
 
-      - name: Run database migrations
-        run: python -m alembic upgrade head
+      - run: python -m alembic upgrade head
 
-      - name: Run daily pipeline (with Amazon discovery + ingestion)
-        run: python -m app.jobs.run_daily --include-amazon-discovery --include-ingestion
+      - name: Run ingestion + scoring + auto-publish + AI drafts
+        run: python -m app.jobs.run_daily --include-ingestion
