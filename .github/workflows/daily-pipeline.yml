@@ -48,7 +48,7 @@ jobs:
   pipeline:
     name: SerpApi ingestion + scoring + auto-publish + AI drafts
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     # Run every hour 08:00–22:00 UTC or on manual dispatch without discovery
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.include_discovery != 'true' || github.event_name == 'schedule' && startsWith(github.event.schedule, '0 8-22')
 
