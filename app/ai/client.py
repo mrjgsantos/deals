@@ -21,6 +21,25 @@ class StubModelClient(ModelClient):
         return self.response_text
 
 
+class GroqModelClient(ModelClient):
+    def __init__(self, model_name: str) -> None:
+        from groq import Groq
+
+        self._client = Groq()
+        self._model = model_name
+
+    def generate(self, *, system_prompt: str, user_prompt: str) -> str:
+        completion = self._client.chat.completions.create(
+            model=self._model,
+            max_tokens=256,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        return completion.choices[0].message.content
+
+
 class AnthropicModelClient(ModelClient):
     def __init__(self, model_name: str) -> None:
         import anthropic
@@ -39,6 +58,11 @@ class AnthropicModelClient(ModelClient):
 
 
 def build_model_client_from_env() -> ModelClient:
+    import os
+
     if settings.ai_copy_model_name and settings.ai_copy_model_name != _STUB_MODEL:
-        return AnthropicModelClient(settings.ai_copy_model_name)
+        if os.environ.get("GROQ_API_KEY"):
+            return GroqModelClient(settings.ai_copy_model_name)
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            return AnthropicModelClient(settings.ai_copy_model_name)
     return StubModelClient(settings.ai_copy_stub_response)

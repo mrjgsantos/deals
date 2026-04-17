@@ -61,8 +61,8 @@ jobs:
       KEEPA_API_KEY: ${{ secrets.KEEPA_API_KEY }}
       SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
       AUTH_SECRET_KEY: ${{ secrets.AUTH_SECRET_KEY }}
-      AI_COPY_MODEL_NAME: ${{ secrets.AI_COPY_MODEL_NAME }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AI_COPY_MODEL_NAME: llama-3.1-8b-instant
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       SERPAPI_ENGINE: ${{ secrets.SERPAPI_ENGINE }}
       SERPAPI_COUNTRY: ${{ secrets.SERPAPI_COUNTRY }}
       SERPAPI_LANGUAGE: ${{ secrets.SERPAPI_LANGUAGE }}
