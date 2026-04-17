@@ -40,6 +40,7 @@ from app.integrations.amazon_es_discovery import (
     AmazonEsCandidatePoolPage,
     assess_discovery_quality,
     discover_candidate_pool_from_html,
+    discover_pagination_urls_from_html,
     fetch_amazon_es_page,
     filter_candidate_pool,
 )
@@ -84,6 +85,7 @@ def main() -> int:
             source_urls,
             logger,
             max_candidates=settings.amazon_discovery_max_candidates,
+            max_pages_per_url=settings.amazon_discovery_max_pages_per_url,
         )
         logger.info(
             "amazon_discovery_complete urls=%s pages_fetched=%s raw_asins=%s accepted=%s",
@@ -127,26 +129,44 @@ def _run_discovery(
     logger: logging.Logger,
     *,
     max_candidates: int,
+    max_pages_per_url: int = 2,
 ) -> tuple[list[AmazonEsCandidate], dict[str, int]]:
     pages: list[AmazonEsCandidatePoolPage] = []
     raw_count = 0
 
-    for url in source_urls:
-        try:
-            html = fetch_amazon_es_page(url)
-            page = discover_candidate_pool_from_html(html, source_url=url)
-            pages.append(page)
-            raw_count += page.raw_candidate_count
-            logger.info(
-                "amazon_discovery_page_fetched url=%s source_type=%s raw=%s candidates=%s issues=%s",
-                url,
-                page.source_type,
-                page.raw_candidate_count,
-                page.candidate_count,
-                page.page_issues or "none",
-            )
-        except Exception:
-            logger.exception("amazon_discovery_page_failed url=%s", url)
+    for source_url in source_urls:
+        url_queue: list[str] = [source_url]
+        visited: set[str] = set()
+        pages_fetched_for_source = 0
+
+        while url_queue and pages_fetched_for_source < max_pages_per_url:
+            current_url = url_queue.pop(0)
+            if current_url in visited:
+                continue
+            visited.add(current_url)
+
+            try:
+                html = fetch_amazon_es_page(current_url)
+                page = discover_candidate_pool_from_html(html, source_url=current_url)
+                pages.append(page)
+                raw_count += page.raw_candidate_count
+                pages_fetched_for_source += 1
+                logger.info(
+                    "amazon_discovery_page_fetched url=%s source_type=%s raw=%s candidates=%s issues=%s",
+                    current_url,
+                    page.source_type,
+                    page.raw_candidate_count,
+                    page.candidate_count,
+                    page.page_issues or "none",
+                )
+
+                if pages_fetched_for_source < max_pages_per_url:
+                    for next_url in discover_pagination_urls_from_html(html, current_url=current_url):
+                        if next_url not in visited:
+                            url_queue.append(next_url)
+
+            except Exception:
+                logger.exception("amazon_discovery_page_failed url=%s", current_url)
 
     if not pages:
         return [], {"pages_fetched": 0, "raw_count": 0}
