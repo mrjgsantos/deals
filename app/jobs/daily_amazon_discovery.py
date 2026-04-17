@@ -29,7 +29,7 @@ import logging
 import time
 from pathlib import Path
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from app.core.config import settings
 from app.ingestion.normalization import DefaultRecordNormalizer
@@ -44,6 +44,7 @@ from app.integrations.amazon_es_discovery import (
     fetch_amazon_es_page,
     filter_candidate_pool,
 )
+from app.db.models import ProductSourceRecord, Source
 from app.integrations.keepa_client import (
     KeepaClientError,
     KeepaConfigurationError,
@@ -249,6 +250,29 @@ def _run_keepa_ingest(
     logger: logging.Logger,
 ) -> tuple[int, int]:
     ensure_source(domain_id)
+
+    with job_session() as db:
+        source = db.scalar(select(Source).where(Source.slug == SOURCE_SLUG))
+        if source:
+            known = set(
+                db.scalars(
+                    select(ProductSourceRecord.external_id).where(
+                        ProductSourceRecord.source_id == source.id,
+                        ProductSourceRecord.external_id.in_(asins),
+                    )
+                ).all()
+            )
+            asins = [a for a in asins if a not in known]
+            if known:
+                logger.info(
+                    "amazon_discovery_skip_known known=%s remaining=%s",
+                    len(known),
+                    len(asins),
+                )
+
+    if not asins:
+        logger.info("amazon_discovery_all_asins_known nothing_to_ingest")
+        return 0, 0
 
     parser = KeepaParser()
     service = IngestionService(
