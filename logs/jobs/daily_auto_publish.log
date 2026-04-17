@@ -451,3 +451,13 @@ Traceback (most recent call last):
   File "/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/mapper.py", line 4251, in _do_configure_registries
     raise e
 sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[Deal(deals)]'. Original exception was: Mapper 'Mapper[AICopyDraft(ai_copy_drafts)]' has no property 'deal'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+2026-04-16 12:40:25,716 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=100 approved_unpublished=0 published=0 skipped=100 failed=0
+2026-04-16 12:40:26,103 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=100 approved_unpublished=0 published=0 skipped=100 failed=0
+2026-04-16 12:41:06,145 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=100 approved_unpublished=0 published=0 skipped=100 failed=0
+2026-04-16 12:41:06,550 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=100 approved_unpublished=0 published=0 skipped=100 failed=0
+2026-04-16 14:04:09,831 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=129 approved_unpublished=0 published=0 skipped=129 failed=0
+2026-04-16 14:04:10,417 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=129 approved_unpublished=0 published=0 skipped=129 failed=0
+2026-04-16 14:07:23,094 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=129 approved_unpublished=0 published=0 skipped=129 failed=0
+2026-04-16 14:07:23,616 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=129 approved_unpublished=0 published=0 skipped=129 failed=0
+2026-04-16 14:08:40,039 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=129 approved_unpublished=0 published=0 skipped=129 failed=0
+2026-04-16 14:08:40,431 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=129 approved_unpublished=0 published=0 skipped=129 failed=0

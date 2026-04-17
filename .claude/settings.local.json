@@ -12,7 +12,32 @@
       "Bash(PGPASSWORD='SgoncaloSUPABASE2015S!' psql:*)",
       "Bash(git stash:*)",
       "Bash(grep -v \"^$\\\\| Container \\\\| Network \")",
-      "Bash(grep -v \"^$\\\\| Container \\\\| Network \\\\|Creating\\\\|Created\\\\|Starting\\\\|Started\")"
+      "Bash(grep -v \"^$\\\\| Container \\\\| Network \\\\|Creating\\\\|Created\\\\|Starting\\\\|Started\")",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(grep -n \"auth-error\\\\|auth-submit\\\\|auth-link\\\\|auth-success\" /Users/jorgesantos/Documents/GitHub/Deals/frontend/src/*.css /Users/jorgesantos/Documents/GitHub/Deals/frontend/src/**/*.css)",
+      "Bash(grep -n \"204\\\\|HTTP_204\" /Users/jorgesantos/Documents/GitHub/Deals/app/api/routes/*.py)",
+      "Bash(grep -n \"is_admin\\\\|role\\\\|require_admin\\\\|admin\" /Users/jorgesantos/Documents/GitHub/Deals/app/api/routes/*.py)",
+      "Bash(grep -rn \"APIRouter\\\\|router = \" /Users/jorgesantos/Documents/GitHub/Deals/app/api/routes/*.py)",
+      "Bash(gh run:*)",
+      "WebSearch",
+      "Bash(git check-ignore *)",
+      "Bash(git -C /Users/jorgesantos/Documents/GitHub/Deals add .gitignore)",
+      "Bash(git -C /Users/jorgesantos/Documents/GitHub/Deals commit -m \"chore: ignore .worktrees directory\")",
+      "Bash(git worktree *)",
+      "Bash(python3 -c ' *)",
+      "Bash(git commit *)",
+      "Bash(grep -v '^$')",
+      "Bash(python3 -m pytest -q tests/test_daily_amazon_discovery.py)",
+      "Bash(/opt/homebrew/bin/python3.12 -m pytest -q tests/test_daily_amazon_discovery.py)",
+      "Bash(pip3 show *)",
+      "Bash(pip show *)",
+      "Bash(python3 -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(git merge *)",
+      "Bash(git branch *)"
     ]
   }
 }
