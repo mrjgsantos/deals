@@ -54,8 +54,7 @@ from app.jobs.common import job_session, run_job
 from app.matching.service import MatchingService
 from scripts.ingest_keepa_bulk import SOURCE_SLUG, chunked, ensure_source
 
-# 10 ASINs per Keepa API call — reduces 60 fetches to 6, halves payload size vs MAX_BATCH_SIZE=20
-DISCOVERY_KEEPA_BATCH_SIZE = 10
+DISCOVERY_KEEPA_BATCH_SIZE = 20
 KEEPA_FETCH_TIMEOUT = 60.0
 KEEPA_FETCH_HARD_TIMEOUT = 120.0
 INGEST_STATEMENT_TIMEOUT_MS = 30_000

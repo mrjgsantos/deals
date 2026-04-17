@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     keepa_domain_id: int = 1
 
     amazon_discovery_urls_file: str = "data/amazon_es_discovery_urls.txt"
-    amazon_discovery_max_candidates: int = 700
+    amazon_discovery_max_candidates: int = 300
     amazon_discovery_max_pages_per_url: int = 2
     amazon_discovery_domain_id: int = 9  # 9 = amazon.es
 
