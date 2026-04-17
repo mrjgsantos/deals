@@ -5,6 +5,7 @@
 # Accepted ASINs are enriched via Keepa and ingested as amazon-keepa source records.
 # Add or remove URLs here without any code changes.
 
+# --- Tecnología ---
 # Electronics best sellers — primary signal source
 https://www.amazon.es/gp/bestsellers/electronics/
 
@@ -16,3 +17,45 @@ https://www.amazon.es/gp/bestsellers/ce-de-ec/
 
 # Movers and shakers (fast-rising products)
 https://www.amazon.es/gp/movers-and-shakers/electronics/
+
+# --- Hogar y cocina ---
+https://www.amazon.es/gp/bestsellers/kitchen/
+
+# --- Moda ---
+https://www.amazon.es/gp/bestsellers/apparel/
+
+# --- Belleza y cuidado personal ---
+https://www.amazon.es/gp/bestsellers/beauty/
+
+# --- Salud y cuidado del hogar ---
+https://www.amazon.es/gp/bestsellers/hpc/
+
+# --- Deporte y aire libre ---
+https://www.amazon.es/gp/bestsellers/sporting-goods/
+
+# --- Juguetes y juegos ---
+https://www.amazon.es/gp/bestsellers/toys/
+
+# --- Alimentación y bebidas ---
+https://www.amazon.es/gp/bestsellers/grocery/
+
+# --- Mascotas ---
+https://www.amazon.es/gp/bestsellers/pet-supplies/
+
+# --- Bebé ---
+https://www.amazon.es/gp/bestsellers/baby/
+
+# --- Coche y moto ---
+https://www.amazon.es/gp/bestsellers/automotive/
+
+# --- Videojuegos ---
+https://www.amazon.es/gp/bestsellers/videogames/
+
+# --- Bricolaje y herramientas ---
+https://www.amazon.es/gp/bestsellers/tools/
+
+# --- Jardín ---
+https://www.amazon.es/gp/bestsellers/lawn-garden/
+
+# --- Libros ---
+https://www.amazon.es/gp/bestsellers/books/
