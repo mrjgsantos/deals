@@ -21,7 +21,8 @@ MIN_PREVIOUS_PRICE_OBSERVATIONS_30D = 3
 MIN_PREVIOUS_PRICE_OBSERVATIONS_90D = 3
 MIN_PREVIOUS_PRICE_OBSERVATIONS_ALL_TIME = 4
 AUTO_PUBLISH_QUALITY_THRESHOLD = 70
-MEDIUM_CONFIDENCE_AUTO_PUBLISH_THRESHOLD = 80
+MEDIUM_CONFIDENCE_AUTO_PUBLISH_THRESHOLD = 70
+LOW_CONFIDENCE_AUTO_PUBLISH_THRESHOLD = 80
 BORDERLINE_REVIEW_THRESHOLD = 60
 BORDERLINE_REVIEW_PRIORITY = 150
 STANDARD_REVIEW_PRIORITY = 100
@@ -222,10 +223,8 @@ class DealGenerationService:
             return False
         confidence = scored.quality.confidence_level
         if confidence == "low":
-            # Not enough history — always route to manual review
-            return False
+            return quality_score >= LOW_CONFIDENCE_AUTO_PUBLISH_THRESHOLD
         if confidence == "medium":
-            # Require a higher bar to compensate for sparse history
             return quality_score >= MEDIUM_CONFIDENCE_AUTO_PUBLISH_THRESHOLD
         return quality_score >= AUTO_PUBLISH_QUALITY_THRESHOLD
 
@@ -346,8 +345,8 @@ class DealGenerationService:
             reason = "preserved_existing_publication"
         elif auto_publish:
             reason = "auto_publish_threshold_met"
-        elif confidence == "low":
-            reason = "low_confidence_pending_review"
+        elif confidence == "low" and quality_score < LOW_CONFIDENCE_AUTO_PUBLISH_THRESHOLD:
+            reason = "low_confidence_below_threshold"
         elif confidence == "medium" and quality_score < MEDIUM_CONFIDENCE_AUTO_PUBLISH_THRESHOLD:
             reason = "medium_confidence_below_threshold"
         elif quality_score >= BORDERLINE_REVIEW_THRESHOLD:
