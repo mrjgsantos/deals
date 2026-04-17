@@ -144,14 +144,11 @@ def score_deal_quality(input_data: DealScoringInput) -> DealQualityScore:
         reasons.append("low_signal_commodity")
         return DealQualityScore(score=0, promotable=False, confidence_level=confidence, reasons=reasons)
 
-    # Graded confidence penalty — replaces the former hard weak_demand_signal disqualifier.
-    # LOW  (obs_90d < 3):                   -20, sends deal to PENDING_REVIEW via auto-publish gate
-    # MEDIUM (obs_90d 3-7 or all_time < 20): -10, auto-publish requires higher score threshold
+    # Graded confidence penalty.
+    # LOW  (obs_90d < 3):                   -10
+    # MEDIUM (obs_90d 3-7 or all_time < 20): -10
     # HIGH:                                   no penalty
-    if confidence == "low":
-        score -= 20
-        reasons.append("low_historical_confidence")
-    elif confidence == "medium":
+    if confidence in ("low", "medium"):
         score -= 10
         reasons.append("low_historical_confidence")
 
