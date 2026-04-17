@@ -37,7 +37,9 @@
       "Bash(git checkout *)",
       "Bash(git pull *)",
       "Bash(git merge *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)"
     ]
   }
 }
