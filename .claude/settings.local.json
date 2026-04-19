@@ -39,7 +39,11 @@
       "Bash(git merge *)",
       "Bash(git branch *)",
       "Skill(claude-api)",
-      "Skill(claude-api:*)"
+      "Skill(claude-api:*)",
+      "Bash(grep -v \"^$\")",
+      "Bash(grep -v \"^$\" /Users/jorgesantos/Documents/GitHub/Deals/logs/jobs/daily_scoring.log)",
+      "Bash(grep -v \"^$\" /Users/jorgesantos/Documents/GitHub/Deals/logs/jobs/daily_auto_publish.log)",
+      "Bash(git -C /Users/jorgesantos/Documents/GitHub/Deals log --oneline -10)"
     ]
   }
 }

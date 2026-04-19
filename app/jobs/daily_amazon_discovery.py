@@ -293,70 +293,70 @@ def _run_keepa_ingest(
         total_batches,
     )
 
-    with job_session() as db:
-        for batch_num, batch in enumerate(
-            chunked(asins, DISCOVERY_KEEPA_BATCH_SIZE), start=1
-        ):
-            batch_label = f"{batch_num}/{total_batches}"
+    for batch_num, batch in enumerate(
+        chunked(asins, DISCOVERY_KEEPA_BATCH_SIZE), start=1
+    ):
+        batch_label = f"{batch_num}/{total_batches}"
 
-            try:
-                logger.info(
-                    "amazon_discovery_keepa_fetch_start batch=%s asins=%s",
-                    batch_label,
-                    batch,
+        try:
+            logger.info(
+                "amazon_discovery_keepa_fetch_start batch=%s asins=%s",
+                batch_label,
+                batch,
+            )
+            fetch_start = time.monotonic()
+            raw_payload = asyncio.run(
+                asyncio.wait_for(
+                    fetch_products_by_asins(
+                        batch,
+                        domain_id=domain_id,
+                        timeout=KEEPA_FETCH_TIMEOUT,
+                    ),
+                    timeout=KEEPA_FETCH_HARD_TIMEOUT,
                 )
-                fetch_start = time.monotonic()
-                raw_payload = asyncio.run(
-                    asyncio.wait_for(
-                        fetch_products_by_asins(
-                            batch,
-                            domain_id=domain_id,
-                            timeout=KEEPA_FETCH_TIMEOUT,
-                        ),
-                        timeout=KEEPA_FETCH_HARD_TIMEOUT,
-                    )
-                )
-                fetch_elapsed = time.monotonic() - fetch_start
-                products_returned = len((raw_payload or {}).get("products") or [])
-                logger.info(
-                    "amazon_discovery_keepa_fetch_done batch=%s elapsed_s=%.1f products_returned=%s",
-                    batch_label,
-                    fetch_elapsed,
-                    products_returned,
-                )
+            )
+            fetch_elapsed = time.monotonic() - fetch_start
+            products_returned = len((raw_payload or {}).get("products") or [])
+            logger.info(
+                "amazon_discovery_keepa_fetch_done batch=%s elapsed_s=%.1f products_returned=%s",
+                batch_label,
+                fetch_elapsed,
+                products_returned,
+            )
 
+            logger.info(
+                "amazon_discovery_preflight_start batch=%s",
+                batch_label,
+            )
+            preflight_start = time.monotonic()
+            preflight = preflight_keepa_batch_for_bulk_ingest(
+                raw_payload,
+                requested_asins=batch,
+                domain_id=domain_id,
+            )
+            logger.info(
+                "amazon_discovery_preflight_done batch=%s elapsed_s=%.1f outcomes=%s accepted_products=%s",
+                batch_label,
+                time.monotonic() - preflight_start,
+                preflight.counts_by_outcome,
+                len((preflight.payload or {}).get("products") or []),
+            )
+
+            products = (preflight.payload or {}).get("products") or []
+            if not products:
                 logger.info(
-                    "amazon_discovery_preflight_start batch=%s",
+                    "amazon_discovery_batch_empty batch=%s",
                     batch_label,
                 )
-                preflight_start = time.monotonic()
-                preflight = preflight_keepa_batch_for_bulk_ingest(
-                    raw_payload,
-                    requested_asins=batch,
-                    domain_id=domain_id,
-                )
-                logger.info(
-                    "amazon_discovery_preflight_done batch=%s elapsed_s=%.1f outcomes=%s accepted_products=%s",
-                    batch_label,
-                    time.monotonic() - preflight_start,
-                    preflight.counts_by_outcome,
-                    len((preflight.payload or {}).get("products") or []),
-                )
+                continue
 
-                products = (preflight.payload or {}).get("products") or []
-                if not products:
-                    logger.info(
-                        "amazon_discovery_batch_empty batch=%s",
-                        batch_label,
-                    )
-                    continue
+            logger.info(
+                "amazon_discovery_ingest_start batch=%s product_count=%s",
+                batch_label,
+                len(products),
+            )
 
-                logger.info(
-                    "amazon_discovery_ingest_start batch=%s product_count=%s",
-                    batch_label,
-                    len(products),
-                )
-
+            with job_session() as db:
                 result = _ingest_batch_with_observability(
                     db=db,
                     service=service,
@@ -366,36 +366,36 @@ def _run_keepa_ingest(
                     batch_label=batch_label,
                 )
 
-                total_accepted += result.accepted
-                total_rejected += result.rejected
-                logger.info(
-                    "amazon_discovery_batch_ingested batch=%s accepted=%s rejected=%s",
-                    batch_label,
-                    result.accepted,
-                    result.rejected,
-                )
+            total_accepted += result.accepted
+            total_rejected += result.rejected
+            logger.info(
+                "amazon_discovery_batch_ingested batch=%s accepted=%s rejected=%s",
+                batch_label,
+                result.accepted,
+                result.rejected,
+            )
 
-            except asyncio.TimeoutError:
-                logger.error(
-                    "amazon_discovery_keepa_timeout batch=%s hard_timeout_s=%s asins=%s skipping_batch",
-                    batch_label,
-                    KEEPA_FETCH_HARD_TIMEOUT,
-                    batch,
-                )
-            except KeepaConfigurationError:
-                raise
-            except KeepaClientError:
-                logger.exception(
-                    "amazon_discovery_keepa_error batch=%s asins=%s skipping_batch",
-                    batch_label,
-                    batch,
-                )
-            except Exception:
-                logger.exception(
-                    "amazon_discovery_batch_error batch=%s asins=%s skipping_batch",
-                    batch_label,
-                    batch,
-                )
+        except asyncio.TimeoutError:
+            logger.error(
+                "amazon_discovery_keepa_timeout batch=%s hard_timeout_s=%s asins=%s skipping_batch",
+                batch_label,
+                KEEPA_FETCH_HARD_TIMEOUT,
+                batch,
+            )
+        except KeepaConfigurationError:
+            raise
+        except KeepaClientError:
+            logger.exception(
+                "amazon_discovery_keepa_error batch=%s asins=%s skipping_batch",
+                batch_label,
+                batch,
+            )
+        except Exception:
+            logger.exception(
+                "amazon_discovery_batch_error batch=%s asins=%s skipping_batch",
+                batch_label,
+                batch,
+            )
 
     logger.info(
         "amazon_discovery_ingest_summary total_batches=%s total_accepted=%s total_rejected=%s elapsed_s=%.1f",

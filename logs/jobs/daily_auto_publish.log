@@ -461,3 +461,4 @@ sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - c
 2026-04-16 14:07:23,616 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=129 approved_unpublished=0 published=0 skipped=129 failed=0
 2026-04-16 14:08:40,039 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=129 approved_unpublished=0 published=0 skipped=129 failed=0
 2026-04-16 14:08:40,431 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=129 approved_unpublished=0 published=0 skipped=129 failed=0
+2026-04-18 14:27:49,903 INFO jobs.daily_auto_publish daily_auto_publish_complete pending_review=523 approved_unpublished=0 published=0 skipped=523 failed=0

@@ -33,6 +33,7 @@ class Settings(BaseSettings):
         '{"title":"Draft unavailable","summary":"No model client configured.","verdict":"not_supported","tags":["review-needed"]}'
     )
 
+    serpapi_enabled: bool = True
     serpapi_api_key: str | None = None
     serpapi_engine: str = "google_shopping"
     serpapi_country: str | None = None

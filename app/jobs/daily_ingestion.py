@@ -19,6 +19,9 @@ def main(argv: list[str] | None = None) -> int:
 
     def _runner(logger):
         if _should_run_serpapi_batch(args):
+            if not settings.serpapi_enabled:
+                logger.info("serpapi_ingestion_skipped reason=serpapi_disabled")
+                return 0
             summary = _run_serpapi_batch(logger, args)
             logger.info(
                 "serpapi_batch_complete total_queries=%s successful_queries=%s failed_queries=%s total_fetched=%s total_mapped=%s total_accepted=%s total_rejected=%s",

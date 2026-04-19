@@ -8,3 +8,5 @@
 2026-04-14 18:35:50,627 INFO jobs.run_daily daily job sequence complete failed_steps=none
 2026-04-14 18:40:28,626 INFO jobs.run_daily starting daily job sequence
 2026-04-14 18:42:14,148 INFO jobs.run_daily daily job sequence complete failed_steps=none
+2026-04-18 12:13:49,319 INFO jobs.run_daily starting daily job sequence
+2026-04-18 14:27:52,319 INFO jobs.run_daily daily job sequence complete failed_steps=amazon_discovery,stats_recompute,scoring
