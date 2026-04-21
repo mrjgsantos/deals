@@ -1,3 +1,4 @@
+import React from "react";
 import type { PublishedDeal } from "../types";
 import {
   getFreshnessSummary,
@@ -36,7 +37,7 @@ function getPlaceholderEmoji(category: string | null): string {
   return CATEGORY_EMOJI[category] ?? "🏷";
 }
 
-export function DealCard({
+export const DealCard = React.memo(function DealCard({
   deal,
   isSaved,
   isSavePending,
@@ -44,6 +45,7 @@ export function DealCard({
   onToggleSave,
   onOutboundClick,
   onViewDetails,
+  priority,
 }: {
   deal: PublishedDeal;
   isSaved: boolean;
@@ -52,6 +54,7 @@ export function DealCard({
   onToggleSave: () => void;
   onOutboundClick?: () => void;
   onViewDetails: (dealId: string) => void;
+  priority?: boolean;
 }) {
   const { currentPrice, previousPrice } = getPriceTrustSummary(deal);
   const savingsValue = getSavingsPercentValue(deal);
@@ -85,7 +88,7 @@ export function DealCard({
             className="d-card-img"
             src={deal.image_url}
             alt={deal.title}
-            loading="lazy"
+            loading={priority ? "eager" : "lazy"}
             decoding="async"
           />
         ) : (
@@ -149,4 +152,4 @@ export function DealCard({
       </div>
     </article>
   );
-}
+});
