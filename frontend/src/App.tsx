@@ -233,16 +233,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [
-    authState.status,
-    savedDeals.length,
-    preferences.categories.join("|"),
-    preferences.intent.join("|"),
-    preferences.budget_preference,
-    preferences.has_pets,
-    preferences.has_kids,
-    preferences.is_profile_initialized,
-  ]);
+  }, [authState.status]);
 
   useEffect(() => {
     if (authState.status !== "authenticated") {
