@@ -43,7 +43,10 @@
       "Bash(grep -v \"^$\")",
       "Bash(grep -v \"^$\" /Users/jorgesantos/Documents/GitHub/Deals/logs/jobs/daily_scoring.log)",
       "Bash(grep -v \"^$\" /Users/jorgesantos/Documents/GitHub/Deals/logs/jobs/daily_auto_publish.log)",
-      "Bash(git -C /Users/jorgesantos/Documents/GitHub/Deals log --oneline -10)"
+      "Bash(git -C /Users/jorgesantos/Documents/GitHub/Deals log --oneline -10)",
+      "Bash(/Users/jorgesantos/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/scripts/start-server.sh --project-dir /Users/jorgesantos/Documents/GitHub/Deals)",
+      "Bash(/Users/jorgesantos/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/scripts/start-server.sh --project-dir /Users/jorgesantos/Documents/GitHub/Deals)",
+      "Bash(gh pr create --title 'perf: surgical frontend performance fixes' --body ' *)"
     ]
   }
 }
