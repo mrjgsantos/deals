@@ -233,8 +233,8 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   // Fires on auth transitions and once when profile initializes; backend personalizes server-side.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authState.status, preferences.is_profile_initialized]);
 
   useEffect(() => {
@@ -460,6 +460,26 @@ export function App() {
       // Analytics should never block the user experience.
     });
   }, [authState.status]);
+
+  const handleFeedOutboundClick = useCallback(
+    (deal: PublishedDeal) => handleDealOutboundClick(deal, "feed"),
+    [handleDealOutboundClick],
+  );
+
+  const handleRecommendedOutboundClick = useCallback(
+    (deal: PublishedDeal) => handleDealOutboundClick(deal, "recommended"),
+    [handleDealOutboundClick],
+  );
+
+  const handleFeedImpressions = useCallback(
+    (deals: PublishedDeal[]) => handleDealImpressions(deals, "feed"),
+    [handleDealImpressions],
+  );
+
+  const handleRecommendedImpressions = useCallback(
+    (deals: PublishedDeal[]) => handleDealImpressions(deals, "recommended"),
+    [handleDealImpressions],
+  );
 
   async function markNewDealsSeen() {
     if (authState.status !== "authenticated") {
@@ -733,8 +753,8 @@ export function App() {
             savedDealIds={savedDealIds}
             pendingDealIds={pendingSaveDealIds}
             onToggleSave={handleToggleSavedDeal}
-            onOutboundClick={(deal) => handleDealOutboundClick(deal, "recommended")}
-            onImpression={(deals) => handleDealImpressions(deals, "recommended")}
+            onOutboundClick={handleRecommendedOutboundClick}
+            onImpression={handleRecommendedImpressions}
             preferences={preferences}
           />
         </main>
@@ -844,8 +864,8 @@ export function App() {
             savedDealIds={savedDealIds}
             pendingDealIds={pendingSaveDealIds}
             onToggleSave={handleToggleSavedDeal}
-            onOutboundClick={(deal) => handleDealOutboundClick(deal, "feed")}
-            onImpression={(deals) => handleDealImpressions(deals, "feed")}
+            onOutboundClick={handleFeedOutboundClick}
+            onImpression={handleFeedImpressions}
             preferences={authState.status === "authenticated" ? preferences : null}
             refreshToken={feedRefreshToken}
           />
