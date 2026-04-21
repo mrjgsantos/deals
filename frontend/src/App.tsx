@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { EmailVerificationBanner } from "./components/EmailVerificationBanner";
 import { InternalConsole } from "./components/InternalConsole";
@@ -303,7 +303,7 @@ export function App() {
     };
   }, []);
 
-  function navigate(path: string) {
+  const navigate = useCallback((path: string) => {
     if (path === pathname) {
       return;
     }
@@ -311,7 +311,7 @@ export function App() {
     window.history.pushState({}, "", path);
     window.scrollTo({ top: 0, behavior: "auto" });
     setPathname(path);
-  }
+  }, [pathname]);
 
   const route = useMemo(() => parseRoute(pathname), [pathname]);
   const savedDealIds = useMemo(() => new Set(savedDeals.map((item) => item.deal.id)), [savedDeals]);
@@ -435,7 +435,7 @@ export function App() {
     });
   }
 
-  function handleDealOutboundClick(deal: PublishedDeal, context: "feed" | "recommended" = "feed") {
+  const handleDealOutboundClick = useCallback((deal: PublishedDeal, context: "feed" | "recommended" = "feed") => {
     if (authState.status !== "authenticated") {
       return;
     }
@@ -447,9 +447,9 @@ export function App() {
       .catch(() => {
         // Personalization click tracking should never block navigation.
       });
-  }
+  }, [authState.status]);
 
-  function handleDealImpressions(deals: PublishedDeal[], context: "feed" | "recommended") {
+  const handleDealImpressions = useCallback((deals: PublishedDeal[], context: "feed" | "recommended") => {
     if (authState.status !== "authenticated" || deals.length === 0) {
       return;
     }
@@ -459,7 +459,7 @@ export function App() {
     ).catch(() => {
       // Analytics should never block the user experience.
     });
-  }
+  }, [authState.status]);
 
   async function markNewDealsSeen() {
     if (authState.status !== "authenticated") {
