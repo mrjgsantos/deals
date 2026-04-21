@@ -14,7 +14,7 @@ import { EmptyStatePanel } from "../components/EmptyStatePanel";
 import { HeroDeal } from "../components/HeroDeal";
 import { SectionBlock } from "../components/SectionBlock";
 
-const INITIAL_COUNT = 24;
+const INITIAL_COUNT = 12;
 const PAGE_SIZE = 12;
 const HERO_COUNT = 2;
 
@@ -297,7 +297,7 @@ export function PublicDealsFeedPage({
           />
         ) : (
           <div className="d-cards-grid" aria-label="Feed de deals">
-            {feedDeals.map((deal) => (
+            {feedDeals.map((deal, index) => (
               <DealCard
                 key={deal.id}
                 deal={deal}
@@ -307,6 +307,7 @@ export function PublicDealsFeedPage({
                 onToggleSave={() => onToggleSave(deal)}
                 onOutboundClick={() => onOutboundClick(deal)}
                 onViewDetails={(id) => navigate(`/deals/${id}`)}
+                priority={index < 4}
               />
             ))}
             {hasMoreDeals ? (
