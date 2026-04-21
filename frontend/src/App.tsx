@@ -233,7 +233,9 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [authState.status]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Fires on auth transitions and once when profile initializes; backend personalizes server-side.
+  }, [authState.status, preferences.is_profile_initialized]);
 
   useEffect(() => {
     if (authState.status !== "authenticated") {
