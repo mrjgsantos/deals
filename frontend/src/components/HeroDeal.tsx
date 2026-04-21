@@ -1,3 +1,4 @@
+import React from "react";
 import type { PublishedDeal } from "../types";
 import {
   getHistoricalPriceInsight,
@@ -53,7 +54,7 @@ function getPlaceholderBg(category: string | null): string {
   return CATEGORY_BG[category] ?? "#F3F4F6";
 }
 
-export function HeroDeal({
+export const HeroDeal = React.memo(function HeroDeal({
   deal,
   onViewDetails,
   onOutboundClick,
@@ -197,4 +198,4 @@ export function HeroDeal({
       </div>
     </article>
   );
-}
+});
