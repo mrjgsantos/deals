@@ -153,12 +153,38 @@ class DealQueryService:
         deals = db.scalars(stmt.order_by(Deal.detected_at.desc())).unique().all()
         return [self._to_record(deal) for deal in deals]
 
+    def list_published_deals(
+        self,
+        db: Session,
+        *,
+        exclude_deal_ids: set | None = None,
+    ) -> list[DealRecord]:
+        """Returns only published/approved deals with published_at set.
+        Filters in SQL — never loads the full deals table into memory.
+        """
+        stmt = self._base_query().where(
+            Deal.status.in_([DealStatus.APPROVED, DealStatus.PUBLISHED]),
+            Deal.published_at.is_not(None),
+        )
+        if exclude_deal_ids:
+            stmt = stmt.where(Deal.id.not_in(exclude_deal_ids))
+        deals = db.scalars(stmt.order_by(Deal.published_at.desc())).unique().all()
+        return [self._to_record(deal) for deal in deals]
+
     def get_deal(self, db: Session, deal_id: UUID) -> DealRecord | None:
         stmt = self._base_query().where(Deal.id == deal_id)
         deal = db.scalar(stmt)
         if deal is None:
             return None
         return self._to_record(deal)
+
+    def get_deals_by_ids(self, db: Session, deal_ids: list) -> list[DealRecord]:
+        """Batch fetch — one query instead of N individual get_deal() calls."""
+        if not deal_ids:
+            return []
+        stmt = self._base_query().where(Deal.id.in_(deal_ids))
+        deals = db.scalars(stmt).unique().all()
+        return [self._to_record(deal) for deal in deals]
 
     def list_published_deals_page(
         self,

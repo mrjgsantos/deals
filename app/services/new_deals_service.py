@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-from app.db.enums import DealStatus
 from app.db.models import User, UserEvent
 from app.services.deal_service import DealQueryService, DealRecord
 from app.services.product_analytics_service import (
@@ -69,19 +68,9 @@ class NewDealsService:
         logger.warning("perf_new_deals load_profile=%.1fms", (time.perf_counter() - t1) * 1000)
 
         t1 = time.perf_counter()
-        all_deals = self.deal_query_service.list_deals(db)
-        logger.warning("perf_new_deals list_deals_all=%.1fms total=%d", (time.perf_counter() - t1) * 1000, len(all_deals))
-
-        t1 = time.perf_counter()
-        published_deals = [
-            deal
-            for deal in all_deals
-            if deal.status in {DealStatus.APPROVED.value, DealStatus.PUBLISHED.value}
-            if deal.published_at is not None
-            if deal.id not in saved_deal_ids
-            if deal.id not in interacted_deal_ids
-        ]
-        logger.warning("perf_new_deals python_filter=%.1fms remaining=%d", (time.perf_counter() - t1) * 1000, len(published_deals))
+        exclude_ids = saved_deal_ids | interacted_deal_ids
+        published_deals = self.deal_query_service.list_published_deals(db, exclude_deal_ids=exclude_ids)
+        logger.warning("perf_new_deals list_published_deals=%.1fms remaining=%d", (time.perf_counter() - t1) * 1000, len(published_deals))
 
         last_seen_at = self._normalize_last_seen(user.last_seen_deals_at)
         if last_seen_at is None:

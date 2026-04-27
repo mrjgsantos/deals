@@ -742,8 +742,14 @@ class PersonalizationService:
         subcategory_counts: dict[str, int] = {}
         seen_asin_set: set[str] = set()
 
+        if not deal_ids:
+            return tuple(seen_asins), category_counts, subcategory_counts
+
+        # Batch fetch — one query instead of one per deal_id
+        deal_map = {deal.id: deal for deal in self.deal_query_service.get_deals_by_ids(db, deal_ids)}
+
         for deal_id in deal_ids:
-            deal = self.deal_query_service.get_deal(db, deal_id)
+            deal = deal_map.get(deal_id)
             if deal is None:
                 continue
             attributes = self.enrich_deal(deal)
