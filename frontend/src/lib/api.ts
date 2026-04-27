@@ -127,6 +127,7 @@ function dispatchAuthExpired(): void {
 }
 
 async function fetchJson(path: string, init?: RequestInit, token?: string | null): Promise<{ response: Response; body: unknown }> {
+  const t0 = performance.now();
   const response = await fetch(buildApiUrl(path), {
     headers: {
       "Content-Type": "application/json",
@@ -135,6 +136,7 @@ async function fetchJson(path: string, init?: RequestInit, token?: string | null
     },
     ...init,
   });
+  const networkMs = performance.now() - t0;
 
   let body: unknown = null;
   try {
@@ -142,6 +144,11 @@ async function fetchJson(path: string, init?: RequestInit, token?: string | null
   } catch {
     body = null;
   }
+
+  const totalMs = performance.now() - t0;
+  console.debug(
+    `[perf] ${init?.method ?? "GET"} ${path} → ${response.status} | network=${networkMs.toFixed(0)}ms total=${totalMs.toFixed(0)}ms`
+  );
 
   return { response, body };
 }

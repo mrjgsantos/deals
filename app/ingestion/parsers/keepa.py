@@ -124,14 +124,23 @@ class KeepaParser(SourceParser):
         return None
 
     def _extract_image_url(self, product: dict[str, Any], domain_id: Any) -> str | None:
+        # Primary: imagesCSV (comma-separated image filenames)
         images_csv = product.get("imagesCSV")
-        if not images_csv:
-            return None
-        first_image = str(images_csv).split(",")[0].strip()
-        if not first_image:
-            return None
-        tld = self.DOMAIN_MAP.get(domain_id, "com")
-        return f"https://images-na.ssl-images-amazon.com/images/I/{first_image}"
+        if images_csv:
+            first_image = str(images_csv).split(",")[0].strip()
+            if first_image:
+                return f"https://images-na.ssl-images-amazon.com/images/I/{first_image}"
+
+        # Fallback: images array [{l: "filename.jpg", ...}, ...]
+        images = product.get("images")
+        if isinstance(images, list) and images:
+            first = images[0]
+            if isinstance(first, dict):
+                filename = first.get("l") or first.get("m")
+                if filename:
+                    return f"https://images-na.ssl-images-amazon.com/images/I/{filename}"
+
+        return None
 
     def _availability_from_product(self, product: dict[str, Any]) -> AvailabilityStatus:
         if product.get("availabilityAmazon", 0) in (0, None):

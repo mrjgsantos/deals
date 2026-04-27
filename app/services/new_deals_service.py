@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.db.enums import DealStatus
 from app.db.models import User, UserEvent
@@ -44,27 +48,47 @@ class NewDealsService:
         now: datetime | None = None,
     ) -> NewDealsResult:
         current_time = now or datetime.now(UTC)
+        t0 = time.perf_counter()
+
+        t1 = time.perf_counter()
         saved_deals = self.saved_deals_service.list_saved_deals(db, user=user)
+        logger.warning("perf_new_deals saved_deals=%.1fms count=%d", (time.perf_counter() - t1) * 1000, len(saved_deals))
+
         saved_deal_ids = {item.deal.id for item in saved_deals}
+
+        t1 = time.perf_counter()
         interacted_deal_ids = self._interacted_deal_ids(db, user=user)
+        logger.warning("perf_new_deals interacted_ids=%.1fms count=%d", (time.perf_counter() - t1) * 1000, len(interacted_deal_ids))
 
         seed_categories: set[str] = set()
         for item in saved_deals:
             seed_categories.update(infer_preference_categories_for_deal(item.deal))
 
+        t1 = time.perf_counter()
         profile = self.personalization_service.load_profile(db, user=user, seed_categories=seed_categories)
+        logger.warning("perf_new_deals load_profile=%.1fms", (time.perf_counter() - t1) * 1000)
+
+        t1 = time.perf_counter()
+        all_deals = self.deal_query_service.list_deals(db)
+        logger.warning("perf_new_deals list_deals_all=%.1fms total=%d", (time.perf_counter() - t1) * 1000, len(all_deals))
+
+        t1 = time.perf_counter()
         published_deals = [
             deal
-            for deal in self.deal_query_service.list_deals(db)
+            for deal in all_deals
             if deal.status in {DealStatus.APPROVED.value, DealStatus.PUBLISHED.value}
             if deal.published_at is not None
             if deal.id not in saved_deal_ids
             if deal.id not in interacted_deal_ids
         ]
+        logger.warning("perf_new_deals python_filter=%.1fms remaining=%d", (time.perf_counter() - t1) * 1000, len(published_deals))
 
         last_seen_at = self._normalize_last_seen(user.last_seen_deals_at)
         if last_seen_at is None:
+            t1 = time.perf_counter()
             ranked = self._rank_fallback(published_deals, profile=profile, now=current_time)
+            logger.warning("perf_new_deals rank_fallback=%.1fms path=no_last_seen", (time.perf_counter() - t1) * 1000)
+            logger.warning("perf_new_deals total=%.1fms", (time.perf_counter() - t0) * 1000)
             return NewDealsResult(
                 last_seen_at=None,
                 new_count=0,
@@ -79,7 +103,10 @@ class NewDealsService:
         ]
         new_count = len(new_deals)
         if new_count > 0:
+            t1 = time.perf_counter()
             ranked_new_deals = self._rank_new_deals(new_deals, profile=profile, now=current_time)
+            logger.warning("perf_new_deals rank_new=%.1fms path=new_deals count=%d", (time.perf_counter() - t1) * 1000, new_count)
+            logger.warning("perf_new_deals total=%.1fms", (time.perf_counter() - t0) * 1000)
             return NewDealsResult(
                 last_seen_at=last_seen_at,
                 new_count=new_count,
@@ -93,7 +120,10 @@ class NewDealsService:
             last_seen_at=last_seen_at,
             now=current_time,
         )
+        t1 = time.perf_counter()
         ranked_fallback = self._rank_fallback(fallback_candidates, profile=profile, now=current_time)
+        logger.warning("perf_new_deals rank_fallback=%.1fms path=fallback", (time.perf_counter() - t1) * 1000)
+        logger.warning("perf_new_deals total=%.1fms", (time.perf_counter() - t0) * 1000)
         return NewDealsResult(
             last_seen_at=last_seen_at,
             new_count=0,

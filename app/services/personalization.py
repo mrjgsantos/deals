@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import hashlib
 from typing import Iterable
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -339,22 +343,36 @@ class PersonalizationService:
         user: User,
         seed_categories: Iterable[str] = (),
     ) -> PersonalizationProfile:
+        t0 = time.perf_counter()
+
+        t1 = time.perf_counter()
         preferences = self.user_preferences_service.get_preferences(db, user=user)
+        logger.warning("perf_load_profile preferences=%.1fms", (time.perf_counter() - t1) * 1000)
+
+        t1 = time.perf_counter()
         signal_models = db.scalars(
             select(UserCategorySignal).where(UserCategorySignal.user_id == user.id)
         ).all()
+        logger.warning("perf_load_profile signals=%.1fms count=%d", (time.perf_counter() - t1) * 1000, len(signal_models))
         last_interacted_at_by_category = {
             signal.category: signal.last_interacted_at for signal in signal_models
         }
+
+        t1 = time.perf_counter()
         recent_seen_asins, recent_seen_category_counts, recent_seen_subcategory_counts = self._load_recent_seen_memory(
             db,
             user=user,
         )
+        logger.warning("perf_load_profile seen_memory=%.1fms asins=%d", (time.perf_counter() - t1) * 1000, len(recent_seen_asins))
+
+        t1 = time.perf_counter()
         recent_saved_asins, recent_saved_categories, recent_saved_subcategory_counts = self._load_recent_saved_memory(
             db,
             user=user,
         )
+        logger.warning("perf_load_profile saved_memory=%.1fms asins=%d", (time.perf_counter() - t1) * 1000, len(recent_saved_asins))
 
+        logger.warning("perf_load_profile total=%.1fms", (time.perf_counter() - t0) * 1000)
         return PersonalizationProfile(
             categories=tuple(preferences.categories),
             seed_categories=tuple(sorted({category for category in seed_categories if category in CATEGORY_KEYWORDS})),

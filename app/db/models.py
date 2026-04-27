@@ -470,6 +470,12 @@ class Deal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_deals_product_variant_id", "product_variant_id"),
         Index("ix_deals_source_id_detected_at", "source_id", "detected_at"),
         Index("ix_deals_ends_at", "ends_at"),
+        Index(
+            "ix_deals_status_published_at",
+            "status",
+            text("published_at DESC"),
+            postgresql_where=text("published_at IS NOT NULL"),
+        ),
     )
 
     product_variant_id: Mapped[UUID | None] = mapped_column(
@@ -704,6 +710,7 @@ class AICopyDraft(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_ai_copy_drafts_deal_id_status", "deal_id", "status"),
         Index("ix_ai_copy_drafts_copy_type", "copy_type"),
+        Index("ix_ai_copy_drafts_deal_id_generated_at", "deal_id", text("generated_at DESC")),
     )
 
     deal_id: Mapped[UUID] = mapped_column(

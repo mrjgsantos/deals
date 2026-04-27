@@ -1,4 +1,5 @@
 import logging
+import time
 import warnings
 from contextlib import asynccontextmanager
 
@@ -79,6 +80,20 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def log_request_timing(request: Request, call_next):
+        t0 = time.perf_counter()
+        response: Response = await call_next(request)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        logger.warning(
+            "perf_request endpoint=%s method=%s status=%s elapsed_ms=%.1f",
+            request.url.path,
+            request.method,
+            response.status_code,
+            elapsed_ms,
+        )
+        return response
 
     @app.middleware("http")
     async def add_security_headers(request: Request, call_next):

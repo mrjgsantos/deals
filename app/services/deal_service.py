@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Integer, and_, cast, exists, or_, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import Integer, and_, cast, exists, or_, select, true
+from sqlalchemy.orm import Session, aliased, contains_eager, joinedload, selectinload
 
 from app.db.enums import AICopyType, DealStatus, ReviewStatus, ReviewType
 from app.db.models import AICopyDraft, Deal, ProductSourceRecord, ProductVariant, ReviewQueue
@@ -149,7 +150,7 @@ class DealQueryService:
         stmt = self._base_query()
         if status is not None:
             stmt = stmt.where(Deal.status == status)
-        deals = db.scalars(stmt.order_by(Deal.detected_at.desc())).all()
+        deals = db.scalars(stmt.order_by(Deal.detected_at.desc())).unique().all()
         return [self._to_record(deal) for deal in deals]
 
     def get_deal(self, db: Session, deal_id: UUID) -> DealRecord | None:
@@ -167,10 +168,38 @@ class DealQueryService:
         cursor_published_at: datetime | None = None,
         cursor_id: UUID | None = None,
     ) -> PublishedDealsPage:
-        stmt = self._base_query().where(
-            Deal.status.in_([DealStatus.APPROVED, DealStatus.PUBLISHED]),
-            Deal.published_at.is_not(None),
+        t0 = time.perf_counter()
+
+        # Lateral subquery: returns at most 1 row (latest draft) per deal.
+        # Because a lateral returns ≤1 row per left-side row, LIMIT on the
+        # outer query is safe — no cartesian product inflates the result set.
+        latest_draft_sq = (
+            select(AICopyDraft)
+            .where(AICopyDraft.deal_id == Deal.id)
+            .order_by(AICopyDraft.generated_at.desc())
+            .limit(1)
+            .correlate(Deal)
+            .lateral()
         )
+        latest_draft = aliased(AICopyDraft, latest_draft_sq)
+
+        stmt = (
+            select(Deal)
+            .outerjoin(Deal.product_variant)
+            .outerjoin(ProductVariant.product)
+            .outerjoin(Deal.product_source_record)
+            .outerjoin(latest_draft, true())
+            .options(
+                contains_eager(Deal.product_variant).contains_eager(ProductVariant.product),
+                contains_eager(Deal.product_source_record),
+                contains_eager(Deal.ai_copy_drafts, alias=latest_draft),
+            )
+            .where(
+                Deal.status.in_([DealStatus.APPROVED, DealStatus.PUBLISHED]),
+                Deal.published_at.is_not(None),
+            )
+        )
+
         if cursor_published_at is not None and cursor_id is not None:
             stmt = stmt.where(
                 or_(
@@ -178,9 +207,12 @@ class DealQueryService:
                     and_(Deal.published_at == cursor_published_at, Deal.id < cursor_id),
                 )
             )
+
         rows = db.scalars(
             stmt.order_by(Deal.published_at.desc(), Deal.id.desc()).limit(limit + 1)
-        ).all()
+        ).unique().all()
+
+        logger.warning("perf_published_deals_page query=%.1fms rows=%d limit=%d cursor=%s", (time.perf_counter() - t0) * 1000, len(rows), limit, cursor_published_at is not None)
         has_more = len(rows) > limit
         page_rows = rows[:limit]
         next_row = page_rows[-1] if has_more and page_rows else None
@@ -193,9 +225,11 @@ class DealQueryService:
 
     def _base_query(self):
         return select(Deal).options(
+            # many-to-one: safe to JOIN, single round-trip
+            joinedload(Deal.product_variant).joinedload(ProductVariant.product),
+            joinedload(Deal.product_source_record),
+            # one-to-many: selectinload to avoid cartesian product with LIMIT
             selectinload(Deal.ai_copy_drafts),
-            selectinload(Deal.product_variant).selectinload(ProductVariant.product),
-            selectinload(Deal.product_source_record),
         )
 
     def _to_record(self, deal: Deal) -> DealRecord:

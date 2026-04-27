@@ -46,7 +46,9 @@
       "Bash(git -C /Users/jorgesantos/Documents/GitHub/Deals log --oneline -10)",
       "Bash(/Users/jorgesantos/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/scripts/start-server.sh --project-dir /Users/jorgesantos/Documents/GitHub/Deals)",
       "Bash(/Users/jorgesantos/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/scripts/start-server.sh --project-dir /Users/jorgesantos/Documents/GitHub/Deals)",
-      "Bash(gh pr create --title 'perf: surgical frontend performance fixes' --body ' *)"
+      "Bash(gh pr create --title 'perf: surgical frontend performance fixes' --body ' *)",
+      "Bash(ls:*)",
+      "Bash(grep -rn \"image_url\\\\|imagesCSV\" /Users/jorgesantos/Documents/GitHub/Deals/scripts/ingest_keepa*.py)"
     ]
   }
 }
