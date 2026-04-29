@@ -18,6 +18,7 @@ def parse_copy_response(response_text: str) -> DealCopyOutput:
     payload = json.loads(text)
     return DealCopyOutput(
         title=str(payload["title"]).strip(),
+        title_pt=str(payload["title_pt"]).strip(),
         summary=str(payload["summary"]).strip(),
         verdict=str(payload["verdict"]).strip(),
         tags=[str(tag).strip() for tag in payload["tags"]],

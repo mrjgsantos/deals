@@ -20,6 +20,8 @@ def validate_copy_output(output: DealCopyOutput, input_data: StructuredDealCopyI
 
     if not output.title or len(output.title) > 90:
         raise ValueError("invalid title length")
+    if not output.title_pt or len(output.title_pt) > 90:
+        raise ValueError("invalid title_pt length")
     if not output.summary or len(output.summary) > 240:
         raise ValueError("invalid summary length")
     if output.verdict not in SUPPORTED_VERDICTS:

@@ -31,6 +31,7 @@ class StructuredDealCopyInput:
 @dataclass(slots=True)
 class DealCopyOutput:
     title: str
+    title_pt: str
     summary: str
     verdict: str
     tags: list[str] = field(default_factory=list)

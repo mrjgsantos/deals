@@ -56,6 +56,7 @@ def _serialize_validated_copy(validated: ValidatedDealCopy) -> str:
     return json.dumps(
         {
             "title": validated.output.title,
+            "title_pt": validated.output.title_pt,
             "summary": validated.output.summary,
             "verdict": validated.output.verdict,
             "tags": validated.output.tags,

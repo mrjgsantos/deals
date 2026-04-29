@@ -5,8 +5,8 @@ import json
 from app.ai.schemas import StructuredDealCopyInput
 
 
-SYSTEM_PROMPT = """You write concise editorial deal copy.
-Return JSON only with keys: title, summary, verdict, tags.
+SYSTEM_PROMPT = """You write concise editorial deal copy in European Portuguese (pt-PT).
+Return JSON only with keys: title, title_pt, summary, verdict, tags.
 Do not invent facts.
 Do not mention unprovided shipping, stock, warranty, scarcity, exclusivity, or time limits.
 Do not decide publish or reject.
@@ -39,8 +39,9 @@ def build_copy_prompt(data: StructuredDealCopyInput) -> str:
     }
 
     instructions = {
-        "title": "One factual line. Mention product and current price. Max 90 chars.",
-        "summary": "Two factual sentences max. Mention price context only if supported by data.",
+        "title": "One factual line in English. Mention product and current price. Max 90 chars.",
+        "title_pt": "Portuguese (pt-PT) translation of the title. Max 90 chars.",
+        "summary": "Two factual sentences max in European Portuguese (pt-PT). Mention price context only if supported by data.",
         "verdict": "One of: strong_value, fair_price, weak_value, not_supported.",
         "tags": "1 to 5 lowercase tags from product/category/value context only.",
     }

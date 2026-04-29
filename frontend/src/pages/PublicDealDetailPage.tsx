@@ -113,7 +113,7 @@ export function PublicDealDetailPage({
             <span className="public-meta-text">Publicado {formatDateTime(publishedAt)}</span>
           </div>
 
-          <h1 className="public-detail-title">{deal.title}</h1>
+          <h1 className="public-detail-title">{(deal.ai_copy_draft?.content?.title_pt as string | undefined) ?? deal.title}</h1>
 
           {aiSummary ? (
             <p className="public-detail-summary">{aiSummary}</p>

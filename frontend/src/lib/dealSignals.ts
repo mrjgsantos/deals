@@ -336,17 +336,17 @@ export function getPriceTrustSummary(deal: PublishedDeal): {
 
 export function getFeedPersonalizationSummary(preferences: UserPreferences): string | null {
   if (preferences.categories.length > 0) {
-    const preview = preferences.categories.slice(0, 2).join(" and ");
-    return `Based on your interests in ${preview.toLowerCase()}`;
+    const preview = preferences.categories.slice(0, 2).join(" e ");
+    return `Baseado nos teus interesses em ${preview.toLowerCase()}`;
   }
   if (preferences.has_pets) {
-    return "Based on the pet-related deals in your profile";
+    return "Baseado nas tuas preferências de animais de estimação";
   }
   if (preferences.has_kids) {
-    return "Based on the family-oriented categories in your profile";
+    return "Baseado nas categorias de família no teu perfil";
   }
   if (preferences.intent.includes("save_money")) {
-    return "Based on your goal of finding stronger savings first";
+    return "Baseado no teu objetivo de encontrar as melhores poupanças";
   }
   return null;
 }
@@ -356,21 +356,21 @@ export function getPersonalizationReasonLabel(
   preferences: UserPreferences,
 ): string | null {
   if (deal.category && preferences.categories.includes(deal.category)) {
-    return `Because you like ${deal.category.toLowerCase()}`;
+    return `Porque gostas de ${deal.category.toLowerCase()}`;
   }
   if (preferences.has_pets && (deal.category === "Lifestyle" || deal.subcategories.includes("pet_care"))) {
-    return "Based on your profile";
+    return "Baseado no teu perfil";
   }
   if (preferences.has_kids && (deal.category === "Lifestyle" || deal.subcategories.includes("baby_kids"))) {
-    return "Based on your profile";
+    return "Baseado no teu perfil";
   }
   if (preferences.intent.includes("save_money") && getSavingsPercentValue(deal) >= 20) {
-    return "Picked for strong savings";
+    return "Selecionado pelas poupanças";
   }
   if (preferences.budget_preference === "low") {
     const numericPrice = Number.parseFloat(deal.current_price);
     if (Number.isFinite(numericPrice) && numericPrice <= 50) {
-      return "Picked for your budget";
+      return "Dentro do teu orçamento";
     }
   }
   return null;

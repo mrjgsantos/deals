@@ -94,7 +94,7 @@ export function PublicDealCard({
         </div>
       </div>
 
-      <div className="public-card-title">{deal.title}</div>
+      <div className="public-card-title">{(deal.ai_copy_draft?.content?.title_pt as string | undefined) ?? deal.title}</div>
       {personalizationLabel ? <div className="public-card-why">{personalizationLabel}</div> : null}
 
       <div className="public-price-block">
