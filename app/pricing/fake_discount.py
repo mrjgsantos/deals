@@ -21,7 +21,19 @@ def analyze_fake_discount(
 
     if claimed_old_price is not None:
         historically_observed_max = _historically_observed_max(aggregation)
-        if historically_observed_max is None or claimed_old_price > historically_observed_max:
+        # Only flag if we have a historical max to compare against AND the
+        # current price is not independently confirmed as a good deal by our
+        # own data. If current_price <= avg_90d we already have evidence the
+        # price is genuinely low, so a merchant's unverified reference price
+        # should not block the deal.
+        price_confirmed_low = (
+            aggregation.avg_90d is not None and current_price <= aggregation.avg_90d
+        )
+        if (
+            historically_observed_max is not None
+            and claimed_old_price > historically_observed_max
+            and not price_confirmed_low
+        ):
             flags.append(
                 FakeDiscountFlag(
                     code="claimed_old_price_never_observed",

@@ -5,6 +5,7 @@ import argparse
 from app.jobs.daily_ai_drafts import main as ai_main
 from app.jobs.daily_amazon_discovery import main as amazon_discovery_main
 from app.jobs.daily_auto_publish import main as auto_publish_main
+from app.jobs.daily_deal_expiry import main as deal_expiry_main
 from app.jobs.daily_ingestion import main as ingestion_main
 from app.jobs.daily_scoring import main as scoring_main
 from app.jobs.daily_stats_recompute import main as stats_main
@@ -29,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
         step_results.append(("stats_recompute", stats_main()))
         step_results.append(("scoring", scoring_main()))
         step_results.append(("auto_publish", auto_publish_main()))
+        step_results.append(("deal_expiry", deal_expiry_main()))
         step_results.append(("ai_drafts", ai_main()))
 
         failed_steps = [name for name, exit_code in step_results if exit_code != 0]

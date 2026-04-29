@@ -107,7 +107,9 @@ export function PublicDealDetailPage({
           <h1 className="public-detail-title">{deal.title}</h1>
 
           <p className="public-detail-summary">
-            {deal.summary ?? "Published deal with real historical pricing context and a direct path to the merchant."}
+            {(deal.ai_copy_draft?.content?.summary as string | undefined)
+              ?? deal.summary
+              ?? "Published deal with real historical pricing context and a direct path to the merchant."}
           </p>
 
           <div className="public-detail-actions">

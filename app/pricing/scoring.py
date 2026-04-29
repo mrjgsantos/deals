@@ -247,20 +247,27 @@ def classify_source_link_quality(url: str | None) -> str | None:
     return "direct"
 
 
-def _best_baseline(input_data: DealScoringInput) -> Decimal | None:
+def compute_weighted_price_baseline(
+    avg_30d: Decimal | None,
+    avg_90d: Decimal | None,
+) -> Decimal | None:
     """Weighted average of available historical windows: 60% avg_30d + 40% avg_90d."""
-    agg = input_data.aggregation
-    has_30d = agg.avg_30d is not None and agg.avg_30d > 0
-    has_90d = agg.avg_90d is not None and agg.avg_90d > 0
+    has_30d = avg_30d is not None and avg_30d > 0
+    has_90d = avg_90d is not None and avg_90d > 0
     if has_30d and has_90d:
-        return (agg.avg_30d * Decimal("0.6") + agg.avg_90d * Decimal("0.4")).quantize(  # type: ignore[operator]
+        return (avg_30d * Decimal("0.6") + avg_90d * Decimal("0.4")).quantize(  # type: ignore[operator]
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
     if has_30d:
-        return agg.avg_30d
+        return avg_30d
     if has_90d:
-        return agg.avg_90d
+        return avg_90d
     return None
+
+
+def _best_baseline(input_data: DealScoringInput) -> Decimal | None:
+    agg = input_data.aggregation
+    return compute_weighted_price_baseline(agg.avg_30d, agg.avg_90d)
 
 
 def _absolute_savings_adjustment(baseline: Decimal | None, current_price: Decimal) -> tuple[int, list[str]]:

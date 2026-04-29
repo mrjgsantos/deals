@@ -40,7 +40,7 @@ def send_verification_email(*, to_email: str, verify_url: str) -> None:
             timeout=10,
         )
         response.raise_for_status()
-        logger.info("email_service_verification_sent to=%s", to_email)
+        logger.warning("email_service_verification_sent to=%s", to_email)
     except Exception:
         logger.exception("email_service_verification_failed to=%s", to_email)
         raise
@@ -81,7 +81,7 @@ def send_password_reset_email(*, to_email: str, reset_url: str) -> None:
             timeout=10,
         )
         response.raise_for_status()
-        logger.info("email_service_sent to=%s", to_email)
+        logger.warning("email_service_password_reset_sent to=%s", to_email)
     except Exception:
         logger.exception("email_service_send_failed to=%s", to_email)
         raise

@@ -4,3 +4,26 @@
 2026-04-14 18:35:50,551 INFO jobs.daily_ai_drafts daily_ai_drafts_complete generated=0 skipped=32
 2026-04-14 18:42:14,061 INFO jobs.daily_ai_drafts daily_ai_drafts_complete generated=2 skipped=89
 2026-04-18 14:27:52,241 INFO jobs.daily_ai_drafts daily_ai_drafts_complete generated=0 skipped=541
+2026-04-29 08:41:14,372 ERROR jobs.daily_ai_drafts job_failed
+Traceback (most recent call last):
+  File "/app/app/jobs/common.py", line 55, in run_job
+    return callback(logger)
+           ^^^^^^^^^^^^^^^^
+  File "/app/app/jobs/daily_ai_drafts.py", line 81, in _runner
+    service.generate_and_persist(
+  File "/app/app/ai/service.py", line 34, in generate_and_persist
+    parsed = parse_copy_response(response_text)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/app/ai/response_parser.py", line 9, in parse_copy_response
+    payload = json.loads(response_text)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2026-04-29 08:42:40,799 INFO jobs.daily_ai_drafts daily_ai_drafts_complete generated=8 skipped=1835

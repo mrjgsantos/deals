@@ -78,13 +78,17 @@ def main() -> int:
                     variant_summary=_variant_summary(variant),
                 )
 
-                service.generate_and_persist(
-                    db,
-                    input_data=structured_input,
-                    model_name=settings.ai_copy_model_name,
-                    prompt_version=settings.ai_copy_prompt_version,
-                )
-                generated += 1
+                try:
+                    service.generate_and_persist(
+                        db,
+                        input_data=structured_input,
+                        model_name=settings.ai_copy_model_name,
+                        prompt_version=settings.ai_copy_prompt_version,
+                    )
+                    generated += 1
+                except Exception:
+                    logger.exception("daily_ai_drafts_generate_failed deal_id=%s", deal.id)
+                    skipped += 1
 
             logger.info("daily_ai_drafts_complete generated=%s skipped=%s", generated, skipped)
         return 0
