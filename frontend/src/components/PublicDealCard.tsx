@@ -46,8 +46,8 @@ export function PublicDealCard({
   const historyTone = getHistoryStrengthTone(deal);
   const savingsPercent = getSavingsPercentValue(deal);
   const freshnessSummary = getFreshnessSummary(deal);
-  const isLimited = freshnessSummary === "Fresh price drop";
-  const isLowData = historySupport === "Shallow history" || historySupport === "Limited history";
+  const isLimited = freshnessSummary === "Queda recente";
+  const isLowData = historySupport === "Histórico escasso" || historySupport === "Histórico limitado";
   const seenTodayCount = getSeenTodayCount(deal.id);
   const historicalInsight = getHistoricalPriceInsight(deal);
   const isGoodDeal = isGreatDeal(deal);
@@ -70,18 +70,18 @@ export function PublicDealCard({
     >
       <div className="public-card-topline">
         <div className="badge-cluster badge-cluster-wrap">
-          {isGoodDeal ? <Badge value="🔥 Great Deal" tone="success" /> : null}
-          {isLowestInHistory ? <Badge value="📉 Lowest in 90 days" tone="success" /> : null}
-          {isLimited ? <Badge value="⚡ LIMITED" tone="warning" /> : null}
-          {isLowData ? <Badge value="⚠️ LOW DATA" tone="warning" /> : null}
-          <Badge value={historySupport} tone={historyTone} />
+          {isGoodDeal ? <Badge value="🔥 Ótimo deal" tone="success" /> : null}
+          {isLowestInHistory ? <Badge value="📉 Mínimo em 90 dias" tone="success" /> : null}
+          {isLimited ? <Badge value="⚡ Queda recente" tone="warning" /> : null}
+          {isLowData ? <Badge value="⚠️ Poucos dados" tone="warning" /> : null}
+          {historySupport ? <Badge value={historySupport} tone={historyTone} /> : null}
         </div>
         <div className="public-card-topline-actions">
-          <span className="public-meta-text">Published {formatDateTime(publishedAt)}</span>
+          <span className="public-meta-text">Publicado {formatDateTime(publishedAt)}</span>
           <button
             type="button"
             className={isSaved ? "save-button save-button-active" : "save-button"}
-            aria-label={isSaved ? "Unsave deal" : "Save deal"}
+            aria-label={isSaved ? "Remover dos guardados" : "Guardar deal"}
             aria-pressed={isSaved}
             disabled={isSavePending}
             onClick={(event) => {
@@ -100,27 +100,30 @@ export function PublicDealCard({
       <div className="public-price-block">
         {savingsPercent >= 0 ? (
           <div className={isGoodDeal ? "public-savings-badge public-savings-badge-strong" : "public-savings-badge"}>
-            Save {priceTrustSummary.savingsPercent}
+            -{priceTrustSummary.savingsPercent}
           </div>
         ) : null}
         <div className="public-price-primary">{priceTrustSummary.currentPrice}</div>
         <div className="public-price-secondary">
           {priceTrustSummary.previousPrice ? (
-            <span className="public-price-previous">Was {priceTrustSummary.previousPrice}</span>
+            <span className="public-price-previous">Antes {priceTrustSummary.previousPrice}</span>
           ) : null}
-          <span>Now {priceTrustSummary.currentPrice}</span>
-          {priceTrustSummary.savingsPercent ? <span>Save {priceTrustSummary.savingsPercent}</span> : null}
+          {priceTrustSummary.savingsPercent ? <span>Poupa {priceTrustSummary.savingsPercent}</span> : null}
         </div>
       </div>
 
       {historicalInsight ? <div className="public-history-insight">{historicalInsight}</div> : null}
 
-      <p className="public-card-summary">{deal.summary ?? "Fresh published deal with verified historical pricing support."}</p>
+      {(deal.ai_copy_draft?.content?.summary as string | undefined) ?? deal.summary ? (
+        <p className="public-card-summary">
+          {(deal.ai_copy_draft?.content?.summary as string | undefined) ?? deal.summary}
+        </p>
+      ) : null}
 
       <div className="public-card-footer">
         <div className="public-card-source">
-          <div>{sourceLabel ?? "Published deal"}</div>
-          <div className="public-meta-text">Seen {seenTodayCount} times today</div>
+          <div>{sourceLabel ?? "Deal publicado"}</div>
+          <div className="public-meta-text">Visto {seenTodayCount}x hoje</div>
         </div>
         <div className="public-card-actions">
           <button
@@ -131,7 +134,7 @@ export function PublicDealCard({
               onViewDetails(deal.id);
             }}
           >
-            View details
+            Ver detalhes
           </button>
           {outboundDealUrl ? (
             <a
@@ -144,7 +147,7 @@ export function PublicDealCard({
                 onOutboundClick();
               }}
             >
-              View on Amazon →
+              Ver na Amazon →
             </a>
           ) : null}
         </div>

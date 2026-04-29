@@ -935,6 +935,47 @@ a:hover {
   font-size: 14px;
 }
 
+.public-reason-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.public-reason-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--surface-alt, #f3f4f6);
+  color: var(--text-secondary, #374151);
+  border: 1px solid var(--border, #e5e7eb);
+}
+
+.public-price-urgency {
+  font-size: 13px;
+  font-weight: 600;
+  color: #059669;
+  margin-bottom: 8px;
+}
+
+.public-sparkline-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+
+.public-sparkline-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-muted, #6b7280);
+}
+
 .app-shell {
   min-height: 100vh;
 }

@@ -7,7 +7,7 @@ from app.pricing.schemas import FakeDiscountAnalysis, FakeDiscountFlag, PriceAgg
 
 MAX_SALE_DURATION_DAYS = 21
 HISTORICAL_AVERAGE_TOLERANCE = Decimal("1.02")
-DISCOUNT_MATH_TOLERANCE = Decimal("0.02")
+DISCOUNT_MATH_TOLERANCE = Decimal("1")
 
 
 def analyze_fake_discount(

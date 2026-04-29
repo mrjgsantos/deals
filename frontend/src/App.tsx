@@ -516,7 +516,7 @@ export function App() {
       return (
         <div className="auth-shell">
           <div className="auth-card auth-card-compact">
-            <div className="auth-title">Checking your session...</div>
+            <div className="auth-title">A verificar sessão...</div>
           </div>
         </div>
       );
@@ -534,13 +534,13 @@ export function App() {
       return (
         <div className="auth-shell">
           <div className="auth-card" style={{ textAlign: "center" }}>
-            <div className="auth-eyebrow">Access denied</div>
-            <h1 className="auth-title" style={{ marginBottom: 12 }}>Not authorised</h1>
+            <div className="auth-eyebrow">Acesso negado</div>
+            <h1 className="auth-title" style={{ marginBottom: 12 }}>Sem permissão</h1>
             <p className="auth-copy" style={{ marginBottom: 24 }}>
-              Your account doesn't have access to the internal console.
+              A tua conta não tem acesso à consola interna.
             </p>
             <button className="auth-submit" onClick={() => navigate("/")}>
-              Back to deals
+              Voltar aos deals
             </button>
           </div>
         </div>
@@ -592,13 +592,13 @@ export function App() {
             </button>
             <nav className="public-nav" aria-label="Public navigation">
               <button type="button" className="public-nav-link" onClick={() => navigate("/")}>
-                Latest deals
+                Deals
               </button>
               <button type="button" className="public-nav-link public-nav-link-active" onClick={() => navigate("/saved")}>
-                Saved deals
+                Guardados
               </button>
               <button type="button" className="public-nav-link" onClick={handleLogout}>
-                Logout
+                Sair
               </button>
             </nav>
           </header>
@@ -625,7 +625,7 @@ export function App() {
       return (
         <div className="auth-shell">
           <div className="auth-card auth-card-compact">
-            <div className="auth-title">Checking your session...</div>
+            <div className="auth-title">A verificar sessão...</div>
           </div>
         </div>
       );
@@ -633,8 +633,8 @@ export function App() {
     if (authState.status !== "authenticated") {
       return (
         <AuthPage
-          title="Save your favorite deals"
-          subtitle="Sign in to keep a private list of deals you want to revisit."
+          title="Guarda os teus deals favoritos"
+          subtitle="Inicia sessão para guardar os deals que queres revisitar."
           onAuthenticated={handlePublicAuthenticated}
         />
       );
@@ -662,13 +662,13 @@ export function App() {
               className="public-nav-link"
               onClick={() => navigate("/")}
             >
-              Latest deals
+              Deals
             </button>
             <button type="button" className="public-nav-link public-nav-link-active" onClick={() => navigate("/saved")}>
-              Saved deals
+              Guardados
             </button>
             <button type="button" className="public-nav-link" onClick={handleLogout}>
-              Logout
+              Sair
             </button>
           </nav>
         </header>
@@ -693,7 +693,7 @@ export function App() {
       return (
         <div className="auth-shell">
           <div className="auth-card auth-card-compact">
-            <div className="auth-title">Checking your session...</div>
+            <div className="auth-title">A verificar sessão...</div>
           </div>
         </div>
       );
@@ -701,8 +701,8 @@ export function App() {
     if (authState.status !== "authenticated") {
       return (
         <AuthPage
-          title="See what’s new for you"
-          subtitle="Sign in to keep track of fresh deals since your last visit."
+          title="Novidades para ti"
+          subtitle="Inicia sessão para ver o que é novo desde a tua última visita."
           onAuthenticated={handlePublicAuthenticated}
         />
       );
@@ -726,17 +726,17 @@ export function App() {
           </button>
           <nav className="public-nav" aria-label="Public navigation">
             <button type="button" className="public-nav-link" onClick={() => navigate("/")}>
-              Latest deals
+              Deals
             </button>
             <button type="button" className="public-nav-link public-nav-link-active" onClick={() => navigate("/new")}>
-              New for you
+              Para ti
               {newDeals.new_count > 0 ? <span className="public-nav-pill">{newDeals.new_count}</span> : null}
             </button>
             <button type="button" className="public-nav-link" onClick={() => navigate("/saved")}>
-              Saved deals
+              Guardados
             </button>
             <button type="button" className="public-nav-link" onClick={handleLogout}>
-              Logout
+              Sair
             </button>
           </nav>
         </header>
@@ -767,7 +767,7 @@ export function App() {
       return (
         <div className="auth-shell">
           <div className="auth-card auth-card-compact">
-            <div className="auth-title">Loading your preferences...</div>
+            <div className="auth-title">A carregar preferências...</div>
           </div>
         </div>
       );
@@ -775,8 +775,8 @@ export function App() {
     if (authState.status !== "authenticated") {
       return (
         <AuthPage
-          title="Personalize your deals"
-          subtitle="Sign in to choose the kinds of deals you want to see first."
+          title="Personaliza o teu feed"
+          subtitle="Inicia sessão para escolher os tipos de deals que queres ver primeiro."
           onAuthenticated={handlePublicAuthenticated}
         />
       );
@@ -822,7 +822,7 @@ export function App() {
             className={route.kind === "public-feed" ? "public-nav-link public-nav-link-active" : "public-nav-link"}
             onClick={() => navigate("/")}
           >
-            Latest deals
+            Deals
           </button>
           {authState.status === "authenticated" ? (
             <button
@@ -830,7 +830,7 @@ export function App() {
               className="public-nav-link"
               onClick={() => navigate("/new")}
             >
-              New for you
+              Para ti
               {newDeals.new_count > 0 ? <span className="public-nav-pill">{newDeals.new_count}</span> : null}
             </button>
           ) : null}
@@ -839,15 +839,15 @@ export function App() {
             className="public-nav-link"
             onClick={() => navigate("/saved")}
           >
-            Saved deals
+            Guardados
           </button>
           {authState.status === "authenticated" ? (
             <button type="button" className="public-nav-link" onClick={handleLogout}>
-              Logout
+              Sair
             </button>
           ) : (
             <button type="button" className="public-nav-link" onClick={() => navigate("/login")}>
-              Login
+              Entrar
             </button>
           )}
         </nav>

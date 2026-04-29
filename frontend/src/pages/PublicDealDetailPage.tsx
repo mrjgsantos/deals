@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { api, getApiErrorMessage } from "../lib/api";
 import { Badge } from "../components/Badge";
+import { PriceSparkline } from "../components/PriceSparkline";
 import { StatusMessage } from "../components/StatusMessage";
 import {
   getFreshnessSummary,
@@ -9,16 +10,17 @@ import {
   getHistorySupportSummary,
   getPublishedDealTimestamp,
   getSourceLabel,
+  getUserRelevantReasons,
   getVolatilitySummary,
   isLowConfidenceDeal,
 } from "../lib/dealSignals";
-import { formatDateTime, formatMoney, formatPercent, toSentenceCase } from "../lib/format";
+import { formatDateTime, formatMoney, formatPercent } from "../lib/format";
 import { toOutboundAmazonUrl } from "../lib/outboundLinks";
 import type { PublishedDeal } from "../types";
 
 function getErrorMessage(error: unknown): string {
-  return getApiErrorMessage(error, "Something went wrong while loading this deal.", {
-    404: "This published deal could not be found.",
+  return getApiErrorMessage(error, "Ocorreu um erro ao carregar este deal.", {
+    404: "Este deal não foi encontrado.",
   });
 }
 
@@ -62,7 +64,7 @@ export function PublicDealDetailPage({
   if (isLoading) {
     return (
       <div className="public-shell">
-        <StatusMessage tone="info" title="Loading deal" detail="Fetching the latest published detail." />
+        <StatusMessage tone="info" title="A carregar deal" detail="A obter os detalhes mais recentes." />
       </div>
     );
   }
@@ -72,10 +74,10 @@ export function PublicDealDetailPage({
       <div className="public-shell">
         <div className="public-back-row">
           <button type="button" className="secondary-button" onClick={() => navigate("/")}>
-            Back to deals
+            ← Voltar
           </button>
         </div>
-        <StatusMessage tone="error" title="Could not load deal" detail={error ?? "Published deal not found."} />
+        <StatusMessage tone="error" title="Não foi possível carregar o deal" detail={error ?? "Deal não encontrado."} />
       </div>
     );
   }
@@ -87,30 +89,35 @@ export function PublicDealDetailPage({
   const lowConfidence = isLowConfidenceDeal(deal);
   const priceHistory = deal.score_breakdown.price_history;
   const outboundDealUrl = toOutboundAmazonUrl(deal.deal_url);
+  const freshness = getFreshnessSummary(deal);
+  const volatility = getVolatilitySummary(deal);
+  const userReasons = getUserRelevantReasons(deal);
+  const daysAtPrice = priceHistory?.days_at_current_price;
+  const aiSummary = (deal.ai_copy_draft?.content?.summary as string | undefined) ?? deal.summary;
 
   return (
     <div className="public-shell">
       <div className="public-back-row">
         <button type="button" className="secondary-button" onClick={() => navigate("/")}>
-          Back to deals
+          ← Voltar
         </button>
       </div>
 
       <article className="public-detail-shell">
         <section className="public-detail-hero">
           <div className="public-detail-meta">
-            <Badge value={historySupport} tone={historyTone} />
-            {lowConfidence ? <Badge value="Needs caution" tone="warning" /> : <Badge value="History-backed" tone="success" />}
-            <span className="public-meta-text">Published {formatDateTime(publishedAt)}</span>
+            {historySupport ? <Badge value={historySupport} tone={historyTone} /> : null}
+            {lowConfidence
+              ? <Badge value="Usar com cautela" tone="warning" />
+              : <Badge value="Suportado por histórico" tone="success" />}
+            <span className="public-meta-text">Publicado {formatDateTime(publishedAt)}</span>
           </div>
 
           <h1 className="public-detail-title">{deal.title}</h1>
 
-          <p className="public-detail-summary">
-            {(deal.ai_copy_draft?.content?.summary as string | undefined)
-              ?? deal.summary
-              ?? "Published deal with real historical pricing context and a direct path to the merchant."}
-          </p>
+          {aiSummary ? (
+            <p className="public-detail-summary">{aiSummary}</p>
+          ) : null}
 
           <div className="public-detail-actions">
             {outboundDealUrl ? (
@@ -121,7 +128,7 @@ export function PublicDealDetailPage({
                 rel="noreferrer"
                 onClick={() => onOutboundClick(deal)}
               >
-                Open deal
+                Ver deal
               </a>
             ) : null}
             <button
@@ -130,7 +137,7 @@ export function PublicDealDetailPage({
               disabled={isSavePending}
               onClick={() => onToggleSave(deal)}
             >
-              {isSaved ? "♥ Saved" : "♡ Save"}
+              {isSaved ? "♥ Guardado" : "♡ Guardar"}
             </button>
             {sourceLabel ? <span className="public-meta-text">{sourceLabel}</span> : null}
           </div>
@@ -142,75 +149,113 @@ export function PublicDealDetailPage({
               <div className="public-price-primary public-price-primary-large">
                 {formatMoney(deal.current_price, deal.currency)}
               </div>
+
+              {daysAtPrice != null && daysAtPrice <= 7 ? (
+                <div className="public-price-urgency">
+                  {daysAtPrice <= 1
+                    ? "⚡ Queda de preço de hoje"
+                    : daysAtPrice <= 3
+                    ? `⚡ Preço a este nível há ${daysAtPrice} dias`
+                    : `Preço a este nível há ${daysAtPrice} dias`}
+                </div>
+              ) : null}
+
               <div className="public-pricing-secondary-grid">
                 <div className="public-detail-metric">
-                  <span>Previous price</span>
+                  <span>Preço anterior</span>
                   <strong>{formatMoney(deal.previous_price, deal.currency)}</strong>
                 </div>
                 <div className="public-detail-metric">
-                  <span>Savings</span>
+                  <span>Poupança</span>
                   <strong>{formatMoney(deal.savings_amount, deal.currency)}</strong>
                 </div>
                 <div className="public-detail-metric">
-                  <span>Discount</span>
+                  <span>Desconto</span>
                   <strong>{formatPercent(deal.savings_percent)}</strong>
                 </div>
               </div>
+
+              {priceHistory ? (
+                <div className="public-sparkline-row">
+                  <PriceSparkline
+                    history={priceHistory}
+                    currentPrice={deal.current_price}
+                    width={120}
+                    height={36}
+                  />
+                  <div className="public-sparkline-labels">
+                    {priceHistory.avg_30d ? (
+                      <span>Média 30d: {formatMoney(priceHistory.avg_30d, deal.currency)}</span>
+                    ) : null}
+                    {priceHistory.all_time_min ? (
+                      <span>Mínimo histórico: {formatMoney(priceHistory.all_time_min, deal.currency)}</span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
-            <section className="public-panel">
-              <div className="public-panel-title">Why this deal stands out</div>
-              <ul className="public-reason-list">
-                {deal.score_breakdown.quality_reasons.length > 0 ? (
-                  deal.score_breakdown.quality_reasons.map((reason) => <li key={reason}>{toSentenceCase(reason)}</li>)
-                ) : (
-                  <li>Published with no extra historical notes.</li>
-                )}
-              </ul>
-            </section>
+            {userReasons.length > 0 ? (
+              <section className="public-panel">
+                <div className="public-panel-title">Porque se destaca</div>
+                <div className="public-reason-chips">
+                  {userReasons.map((reason) => (
+                    <span key={reason} className="public-reason-chip">{reason}</span>
+                  ))}
+                </div>
+              </section>
+            ) : null}
           </div>
 
           <aside className="public-detail-sidebar">
             <section className="public-panel">
-              <div className="public-panel-title">Confidence</div>
+              <div className="public-panel-title">Contexto de preço</div>
               <div className="public-sidebar-stack">
-                <div className="public-detail-kv">
-                  <span>History support</span>
-                  <strong>{historySupport}</strong>
-                </div>
-                <div className="public-detail-kv">
-                  <span>Freshness</span>
-                  <strong>{getFreshnessSummary(deal)}</strong>
-                </div>
-                <div className="public-detail-kv">
-                  <span>Price behavior</span>
-                  <strong>{getVolatilitySummary(deal)}</strong>
-                </div>
-                <div className="public-detail-kv">
-                  <span>Quality score</span>
-                  <strong>{deal.score_breakdown.quality_score ?? "—"}</strong>
-                </div>
+                {historySupport ? (
+                  <div className="public-detail-kv">
+                    <span>Suporte histórico</span>
+                    <strong>{historySupport}</strong>
+                  </div>
+                ) : null}
+                {freshness ? (
+                  <div className="public-detail-kv">
+                    <span>Frescura</span>
+                    <strong>{freshness}</strong>
+                  </div>
+                ) : null}
+                {volatility ? (
+                  <div className="public-detail-kv">
+                    <span>Comportamento</span>
+                    <strong>{volatility}</strong>
+                  </div>
+                ) : null}
               </div>
             </section>
 
             {priceHistory ? (
               <section className="public-panel">
-                <div className="public-panel-title">Historical context</div>
+                <div className="public-panel-title">Histórico de preços</div>
                 <div className="public-sidebar-stack">
+                  {priceHistory.avg_30d ? (
+                    <div className="public-detail-kv">
+                      <span>Média 30d</span>
+                      <strong>{formatMoney(priceHistory.avg_30d, deal.currency)}</strong>
+                    </div>
+                  ) : null}
+                  {priceHistory.avg_90d ? (
+                    <div className="public-detail-kv">
+                      <span>Média 90d</span>
+                      <strong>{formatMoney(priceHistory.avg_90d, deal.currency)}</strong>
+                    </div>
+                  ) : null}
+                  {priceHistory.all_time_min ? (
+                    <div className="public-detail-kv">
+                      <span>Mínimo histórico</span>
+                      <strong>{formatMoney(priceHistory.all_time_min, deal.currency)}</strong>
+                    </div>
+                  ) : null}
                   <div className="public-detail-kv">
-                    <span>Avg 30d</span>
-                    <strong>{formatMoney(priceHistory.avg_30d, deal.currency)}</strong>
-                  </div>
-                  <div className="public-detail-kv">
-                    <span>Avg 90d</span>
-                    <strong>{formatMoney(priceHistory.avg_90d, deal.currency)}</strong>
-                  </div>
-                  <div className="public-detail-kv">
-                    <span>All-time low</span>
-                    <strong>{formatMoney(priceHistory.all_time_min, deal.currency)}</strong>
-                  </div>
-                  <div className="public-detail-kv">
-                    <span>Observations</span>
+                    <span>Observações</span>
                     <strong>{priceHistory.observation_count_all_time}</strong>
                   </div>
                 </div>

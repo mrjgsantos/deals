@@ -145,49 +145,49 @@ export function getHistorySupportSummary(deal: HistoryAwareDealLike): string {
   const history = deal.score_breakdown.price_history;
   if (hasReason(deal, "strong_history_support")) {
     return history
-      ? `Strong support (${history.observation_count_90d} obs / 90d)`
-      : "Strong 90d support";
+      ? `Histórico sólido (${history.observation_count_90d} obs / 90d)`
+      : "Histórico sólido";
   }
   if (hasReason(deal, "adequate_history_support")) {
     return history
-      ? `Moderate support (${history.observation_count_90d} obs / 90d)`
-      : "Moderate 90d support";
+      ? `Histórico adequado (${history.observation_count_90d} obs / 90d)`
+      : "Histórico adequado";
   }
   if (hasReason(deal, "weak_discount_support")) {
-    return "Shallow history";
+    return "Histórico escasso";
   }
   if (hasReason(deal, "limited_discount_support") || hasReason(deal, "limited_price_history")) {
-    return "Limited history";
+    return "Histórico limitado";
   }
-  return "History not highlighted";
+  return null as unknown as string;
 }
 
-export function getVolatilitySummary(deal: HistoryAwareDealLike): string {
+export function getVolatilitySummary(deal: HistoryAwareDealLike): string | null {
   if (hasReason(deal, "stable_price_history")) {
-    return "Stable price range";
+    return "Preço estável";
   }
   if (hasReason(deal, "volatile_price_history")) {
-    return "Volatile pricing";
+    return "Preço volátil";
   }
-  return "No volatility signal";
+  return null;
 }
 
 export function getHistoricalValueSummary(deal: HistoryAwareDealLike): string {
   if (deal.previous_price == null) {
     if (hasReason(deal, "weak_discount_support") || hasReason(deal, "limited_discount_support")) {
-      return "No supported savings baseline";
+      return "Sem baseline suportado";
     }
-    return "No historical baseline shown";
+    return "Sem baseline histórico";
   }
 
   const history = deal.score_breakdown.price_history;
   if (history?.avg_30d) {
-    return `Savings grounded by recent history (${history.observation_count_30d} obs / 30d)`;
+    return `Poupança suportada por histórico recente (${history.observation_count_30d} obs / 30d)`;
   }
   if (history?.avg_90d) {
-    return `Savings grounded by broader history (${history.observation_count_90d} obs / 90d)`;
+    return `Poupança suportada por histórico alargado (${history.observation_count_90d} obs / 90d)`;
   }
-  return "Savings grounded by historical support";
+  return "Poupança suportada por histórico";
 }
 
 export function getHistoryStrengthTone(
@@ -207,14 +207,40 @@ export function getHistoryStrengthTone(
   return "neutral";
 }
 
-export function getFreshnessSummary(deal: HistoryAwareDealLike): string {
+export function getFreshnessSummary(deal: HistoryAwareDealLike): string | null {
   if (hasReason(deal, "fresh_price_drop")) {
-    return "Fresh price drop";
+    return "Queda recente";
   }
   if (hasReason(deal, "stale_price")) {
-    return "Price has been stale";
+    return "Preço estagnado";
   }
-  return "Freshness neutral";
+  return null;
+}
+
+const REASON_LABEL_PT: Record<string, string> = {
+  strong_discount_vs_baseline: "Desconto forte vs média histórica",
+  meaningful_discount_vs_baseline: "Desconto real vs média histórica",
+  at_all_time_low: "Preço mínimo histórico",
+  fresh_price_drop: "Queda de preço recente",
+  stable_price_history: "Histórico de preço estável",
+  high_absolute_savings: "Poupança absoluta elevada",
+  meaningful_absolute_savings: "Poupança significativa",
+  strong_history_support: "Histórico sólido",
+  adequate_history_support: "Histórico adequado",
+  high_demand_category: "Categoria de alta procura",
+  recognized_brand: "Marca reconhecida",
+};
+
+const USER_RELEVANT_REASONS = new Set(Object.keys(REASON_LABEL_PT));
+
+export function getReasonLabelPt(reason: string): string {
+  return REASON_LABEL_PT[reason] ?? reason;
+}
+
+export function getUserRelevantReasons(deal: HistoryAwareDealLike): string[] {
+  return deal.score_breakdown.quality_reasons
+    .filter((r) => USER_RELEVANT_REASONS.has(r))
+    .map((r) => REASON_LABEL_PT[r]);
 }
 
 export function getPublicationReadiness(deal: Deal): {
@@ -254,10 +280,10 @@ export function getHistoricalPriceInsight(deal: PublishedDeal): string | null {
   const history = deal.score_breakdown.price_history;
   const baseline = history?.avg_30d ?? history?.avg_90d;
   if (baseline != null) {
-    return `Usually ${formatMoney(baseline, deal.currency)}, now ${formatMoney(deal.current_price, deal.currency)}`;
+    return `Normalmente ${formatMoney(baseline, deal.currency)}, agora ${formatMoney(deal.current_price, deal.currency)}`;
   }
   if (deal.previous_price != null) {
-    return `Previously ${formatMoney(deal.previous_price, deal.currency)}, now ${formatMoney(deal.current_price, deal.currency)}`;
+    return `Anteriormente ${formatMoney(deal.previous_price, deal.currency)}, agora ${formatMoney(deal.current_price, deal.currency)}`;
   }
   return null;
 }
