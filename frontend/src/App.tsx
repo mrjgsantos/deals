@@ -587,19 +587,13 @@ export function App() {
       return (
         <div className="public-app-shell">
           <header className="public-header">
-            <button type="button" className="public-brand" onClick={() => navigate("/")}>
-              Deals
-            </button>
+            <div className="public-header-left">
+              <button type="button" className="public-brand" onClick={() => navigate("/")}>Deals</button>
+            </div>
             <nav className="public-nav" aria-label="Public navigation">
-              <button type="button" className="public-nav-link" onClick={() => navigate("/")}>
-                Deals
-              </button>
-              <button type="button" className="public-nav-link public-nav-link-active" onClick={() => navigate("/saved")}>
-                Guardados
-              </button>
-              <button type="button" className="public-nav-link" onClick={handleLogout}>
-                Sair
-              </button>
+              <button type="button" className="public-nav-link" onClick={() => navigate("/")}>Deals</button>
+              <button type="button" className="public-nav-link public-nav-link-active" onClick={() => navigate("/saved")}>Guardados</button>
+              <button type="button" className="public-nav-link" onClick={handleLogout}>Sair</button>
             </nav>
           </header>
 
@@ -653,23 +647,13 @@ export function App() {
     return (
       <div className="public-app-shell">
         <header className="public-header">
-          <button type="button" className="public-brand" onClick={() => navigate("/")}>
-            Deals
-          </button>
+          <div className="public-header-left">
+            <button type="button" className="public-brand" onClick={() => navigate("/")}>Deals</button>
+          </div>
           <nav className="public-nav" aria-label="Public navigation">
-            <button
-              type="button"
-              className="public-nav-link"
-              onClick={() => navigate("/")}
-            >
-              Deals
-            </button>
-            <button type="button" className="public-nav-link public-nav-link-active" onClick={() => navigate("/saved")}>
-              Guardados
-            </button>
-            <button type="button" className="public-nav-link" onClick={handleLogout}>
-              Sair
-            </button>
+            <button type="button" className="public-nav-link" onClick={() => navigate("/")}>Deals</button>
+            <button type="button" className="public-nav-link public-nav-link-active" onClick={() => navigate("/saved")}>Guardados</button>
+            <button type="button" className="public-nav-link" onClick={handleLogout}>Sair</button>
           </nav>
         </header>
 
@@ -721,23 +705,17 @@ export function App() {
     return (
       <div className="public-app-shell">
         <header className="public-header">
-          <button type="button" className="public-brand" onClick={() => navigate("/")}>
-            Deals
-          </button>
+          <div className="public-header-left">
+            <button type="button" className="public-brand" onClick={() => navigate("/")}>Deals</button>
+          </div>
           <nav className="public-nav" aria-label="Public navigation">
-            <button type="button" className="public-nav-link" onClick={() => navigate("/")}>
-              Deals
-            </button>
+            <button type="button" className="public-nav-link" onClick={() => navigate("/")}>Deals</button>
             <button type="button" className="public-nav-link public-nav-link-active" onClick={() => navigate("/new")}>
               Para ti
               {newDeals.new_count > 0 ? <span className="public-nav-pill">{newDeals.new_count}</span> : null}
             </button>
-            <button type="button" className="public-nav-link" onClick={() => navigate("/saved")}>
-              Guardados
-            </button>
-            <button type="button" className="public-nav-link" onClick={handleLogout}>
-              Sair
-            </button>
+            <button type="button" className="public-nav-link" onClick={() => navigate("/saved")}>Guardados</button>
+            <button type="button" className="public-nav-link" onClick={handleLogout}>Sair</button>
           </nav>
         </header>
 
@@ -813,17 +791,27 @@ export function App() {
   return (
     <div className="public-app-shell">
       <header className="public-header">
-        <button type="button" className="public-brand" onClick={() => navigate("/")}>
-          Deals
-        </button>
+        <div className="public-header-left">
+          {route.kind === "public-detail" ? (
+            <button type="button" className="public-back-nav-btn" onClick={() => navigate("/")}>
+              ← Deals
+            </button>
+          ) : (
+            <button type="button" className="public-brand" onClick={() => navigate("/")}>
+              Deals
+            </button>
+          )}
+        </div>
         <nav className="public-nav" aria-label="Public navigation">
-          <button
-            type="button"
-            className={route.kind === "public-feed" ? "public-nav-link public-nav-link-active" : "public-nav-link"}
-            onClick={() => navigate("/")}
-          >
-            Deals
-          </button>
+          {route.kind !== "public-detail" ? (
+            <button
+              type="button"
+              className={route.kind === "public-feed" ? "public-nav-link public-nav-link-active" : "public-nav-link"}
+              onClick={() => navigate("/")}
+            >
+              Deals
+            </button>
+          ) : null}
           {authState.status === "authenticated" ? (
             <button
               type="button"
@@ -846,7 +834,7 @@ export function App() {
               Sair
             </button>
           ) : (
-            <button type="button" className="public-nav-link" onClick={() => navigate("/login")}>
+            <button type="button" className="public-nav-link public-nav-link-cta" onClick={() => navigate("/login")}>
               Entrar
             </button>
           )}

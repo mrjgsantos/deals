@@ -85,6 +85,12 @@ a:hover {
   backdrop-filter: blur(18px);
 }
 
+.public-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .public-brand,
 .public-nav-link {
   border: 0;
@@ -100,10 +106,29 @@ a:hover {
   letter-spacing: -0.05em;
 }
 
+.public-back-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px 6px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: -0.02em;
+}
+
+.public-back-nav-btn:hover {
+  background: rgba(15, 23, 42, 0.11);
+}
+
 .public-nav {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 4px;
 }
 
 .public-nav-pill {
@@ -112,7 +137,7 @@ a:hover {
   justify-content: center;
   min-width: 20px;
   height: 20px;
-  margin-left: 8px;
+  margin-left: 6px;
   padding: 0 6px;
   border-radius: 999px;
   background: #dbeafe;
@@ -122,15 +147,31 @@ a:hover {
 }
 
 .public-nav-link {
-  padding: 8px 0;
-  border-bottom: 2px solid transparent;
+  padding: 6px 12px;
+  border-radius: 999px;
   color: var(--text-muted);
+  font-size: 14px;
   font-weight: 600;
 }
 
-.public-nav-link-active {
-  border-color: #0f4aa3;
+.public-nav-link:hover {
+  background: rgba(15, 23, 42, 0.05);
   color: #0f172a;
+}
+
+.public-nav-link-active {
+  background: rgba(15, 74, 163, 0.09);
+  color: #0f4aa3;
+}
+
+.public-nav-link-cta {
+  background: #0f172a;
+  color: #ffffff !important;
+}
+
+.public-nav-link-cta:hover {
+  background: #1e293b !important;
+  color: #ffffff !important;
 }
 
 .public-main {
@@ -340,12 +381,18 @@ a:hover {
 .public-card-footer,
 .public-card-actions,
 .public-detail-meta,
-.public-detail-actions,
 .public-back-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.public-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
 }
 

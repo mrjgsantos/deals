@@ -26,7 +26,7 @@ function getErrorMessage(error: unknown): string {
 
 export function PublicDealDetailPage({
   dealId,
-  navigate,
+  navigate: _navigate,
   isSaved,
   isSavePending,
   onToggleSave,
@@ -72,11 +72,6 @@ export function PublicDealDetailPage({
   if (error || !deal) {
     return (
       <div className="public-shell">
-        <div className="public-back-row">
-          <button type="button" className="secondary-button" onClick={() => navigate("/")}>
-            ← Voltar
-          </button>
-        </div>
         <StatusMessage tone="error" title="Não foi possível carregar o deal" detail={error ?? "Deal não encontrado."} />
       </div>
     );
@@ -97,12 +92,6 @@ export function PublicDealDetailPage({
 
   return (
     <div className="public-shell">
-      <div className="public-back-row">
-        <button type="button" className="secondary-button" onClick={() => navigate("/")}>
-          ← Voltar
-        </button>
-      </div>
-
       <article className="public-detail-shell">
         <section className="public-detail-hero">
           <div className="public-detail-meta">

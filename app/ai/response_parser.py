@@ -1,8 +1,27 @@
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 
 from app.ai.schemas import DealCopyOutput
+
+_TAG_INVALID_RE = re.compile(r"[^a-z0-9-]")
+
+
+def _normalize_tag(raw: str) -> str | None:
+    """Normalize a model-generated tag to [a-z0-9-]{2,24}.
+
+    Strips accents, lowercases, replaces spaces/underscores with hyphens,
+    removes remaining invalid chars, and truncates. Returns None if the
+    result is too short to be useful.
+    """
+    tag = unicodedata.normalize("NFD", raw.strip().lower())
+    tag = "".join(c for c in tag if unicodedata.category(c) != "Mn")
+    tag = tag.replace(" ", "-").replace("_", "-")
+    tag = _TAG_INVALID_RE.sub("", tag)
+    tag = re.sub(r"-{2,}", "-", tag).strip("-")[:24]
+    return tag if len(tag) >= 2 else None
 
 
 def parse_copy_response(response_text: str) -> DealCopyOutput:
@@ -21,5 +40,5 @@ def parse_copy_response(response_text: str) -> DealCopyOutput:
         title_pt=str(payload["title_pt"]).strip(),
         summary=str(payload["summary"]).strip(),
         verdict=str(payload["verdict"]).strip(),
-        tags=[str(tag).strip() for tag in payload["tags"]],
+        tags=[n for tag in payload["tags"] if (n := _normalize_tag(str(tag))) is not None],
     )

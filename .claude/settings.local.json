@@ -49,7 +49,8 @@
       "Bash(gh pr create --title 'perf: surgical frontend performance fixes' --body ' *)",
       "Bash(ls:*)",
       "Bash(grep -rn \"image_url\\\\|imagesCSV\" /Users/jorgesantos/Documents/GitHub/Deals/scripts/ingest_keepa*.py)",
-      "Bash(render --version)"
+      "Bash(render --version)",
+      "Bash(curl -s http://localhost:5173)"
     ]
   }
 }
